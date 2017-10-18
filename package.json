@@ -11,5 +11,9 @@
   "dependencies": {
     "electron": "^1.7.9",
     "jsonfile": "^4.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexiusacademia/electron-db"
   }
 }
