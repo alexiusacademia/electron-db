@@ -4,7 +4,7 @@
   "description": "Electron module that simulates database table operations which really just uses json file to store tables in the Application Folder.",
   "main": "index.js",
   "scripts": {
-    "test": "node test.js"
+    
   },
   "author": "Alexius Academia <alexius.academia@gmail.com> (https://alexiusacademia.com)",
   "license": "MIT",
