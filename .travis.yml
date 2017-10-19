@@ -1,9 +1,8 @@
 language: node_js
 
 node_js:
+  - "iojs"
   - "6"
-  - "10"
-  - "2"
 
 before_install:
   - npm install electron --save
