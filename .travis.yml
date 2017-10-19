@@ -6,3 +6,4 @@ node_js:
 before_install:
   - npm install electron
   - npm install jsonfile
+  - npm install
