@@ -16,7 +16,5 @@
     "type": "git",
     "url": "https://github.com/alexiusacademia/electron-db"
   },
-  "devDependencies": {
-    "electron": "1.7.9"
-  }
+  "devDependencies": {}
 }
