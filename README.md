@@ -19,6 +19,9 @@ Creates a json file [table-name].js inside the application userData folder.
 
 ```javascript
 const db = require('electron-db');
+const electron = require('electron');
+
+const app = electron.app || electron.remote.app;
 
 db.createTable('customers', (succ, msg) => {
   console.log("Success: " + succ);
@@ -41,6 +44,10 @@ Insert an object into the list of row/data of the table.
 
 ```javascript
 const db = require('electron-db');
+const electron = require('electron');
+
+const app = electron.app || electron.remote.app;
+
 let obj = new Object();
 
 obj.name = "Alexius Academia";
@@ -73,6 +80,9 @@ Get a row using id.
 
 ```javascript
 const db = require('electron-db');
+const electron = require('electron');
+
+const app = electron.app || electron.remote.app;
 
 db.getRow('customers', 1508371528701, (succ, obj) => {
   console.log("Success: " + succ);
@@ -84,4 +94,27 @@ db.getRow('customers', 1508371528701, (succ, obj) => {
     	Success: true
         Message: Alexius Academia
 */
+```
+
+### **Update Row**
+Updates a specific row or rows from a table/json file using a WHERE clause.
+
+```javascript
+const db = require('electron-db');
+const electron = require('electron');
+
+const app = electron.app || electron.remote.app;
+
+let where = {
+  "name": "Alexius Academia"
+};
+
+let set = {
+  "address": "Paco, Botolan, Zambales"
+}
+
+db.updateRow('customers', where, set, (succ, msg) => {
+  console.log("Success: " + succ);
+  console.log("Message: " + msg);
+});
 ```

@@ -137,10 +137,75 @@ function getRow(tableName, id, callback) {
   }
 }
 
+/**
+ * Update a row or record which satisfies the where clause
+ * @param  {[string]}   tableName [Table name]
+ * @param  {[object]}   where     [Objet for WHERE clause]
+ * @param  {[object]}   set       [Object for SET clause]
+ * @param  {Function} callback  [Callback function]
+ */
+function updateRow(tableName, where, set, callback) {
+  let fname = path.join(userData, tableName + '.json');
+  let exists = fs.existsSync(fname);
+
+  let whereKeys = Object.keys(where);
+  let setKeys = Object.keys(set);
+
+  if (exists) {
+    let table = JSON.parse(fs.readFileSync(fname));
+    let rows = table[tableName];
+
+    for (var i = 0; i < rows.length; i++) {
+      let matched = 0;    // Number of matched complete where clause
+      for (var j = 0; j < whereKeys.length; j++) {
+        // Test if there is a matched key with where clause and single row of table
+        if (rows[i].hasOwnProperty(whereKeys[j])) {
+          if (rows[i][whereKeys[j]] === where[whereKeys]) {
+            matched++;
+          }
+        }
+      }
+
+      if (matched === whereKeys.length) {
+        // All field from where clause are present in this particular
+        // row of the database table
+        try {
+          for (var k = 0; k < setKeys.length; k++) {
+            rows[i][setKeys[k]] = set[setKeys[k]];
+          }
+
+          // Create a new object and pass the rows
+          let obj = new Object();
+          obj[tableName] = rows;
+
+          // Write the object to json file
+          try {
+            jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
+              console.log(err);
+            });
+            callback(true, "Success!")
+            return;
+          } catch (e) {
+            callback(false, e.toString());
+          }
+
+          callback(true, rows);
+        } catch (e) {
+          callback(false, e.toString());
+        }
+      } else {
+        callback(false, "Cannot find the specified record.")
+      }
+
+    }
+  }
+}
+
 // Export the public available functions
 module.exports = {
   createTable,
   insertTableContent,
   getAll,
-  getRow
+  getRow,
+  updateRow
 };
