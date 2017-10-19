@@ -66,3 +66,20 @@ db.insertTableContent('customers', obj, (succ, msg) => {
 
 */
 ```
+### **Get Row from the table**
+Get a row using id.
+
+```javascript
+const db = require('electron-db');
+
+db.getRow('customers', 1508371528701, (succ, obj) => {
+  console.log("Success: " + succ);
+  console.log("Message: " + obj.name);
+})
+
+/*
+	Output:
+    	Success: true
+        Message: Alexius Academia
+*/
+```

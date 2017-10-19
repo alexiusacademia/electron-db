@@ -1,6 +1,6 @@
 {
   "name": "electron-db",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Electron module that simulates database table operations which really just uses json file to store tables in the Application Folder.",
   "main": "index.js",
   "scripts": {
@@ -11,5 +11,9 @@
   "dependencies": {
     "electron": "^1.7.9",
     "jsonfile": "^4.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexiusacademia/electron-db"
   }
 }

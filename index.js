@@ -44,10 +44,12 @@ function createTable(tableName, callback) {
 
 
 /**
- * Insert object to table
+ * Insert object to table. The object will be appended with the property, id
+ * which uses timestamp as value.
  * @param  {string} tableName  [Table name]
  * @param  {string} tableField [Field name]
  * @param  {value} fieldValue [Value (string, number, list, etc.)]
+ * @param {Function} callback [Callback function]
  */
 function insertTableContent(tableName, tableRow, callback) {
   let fname = path.join(userData, tableName + '.json');
@@ -56,6 +58,10 @@ function insertTableContent(tableName, tableRow, callback) {
   if (exists) {
     // Table | json parsed
     let table = JSON.parse(fs.readFileSync(fname));
+
+    let date = new Date();
+    let id = date.getTime();
+    tableRow['id'] = id;
 
     table[tableName].push(tableRow);
 
@@ -73,8 +79,68 @@ function insertTableContent(tableName, tableRow, callback) {
   callback(false, "Table/json file doesn't exist!");
 }
 
+/**
+ * Get all contents of the table/json file object
+ * @param  {[string]}   tableName [Table name]
+ * @param  {Function} callback  [callback]
+ */
+function getAll(tableName, callback) {
+  let fname = path.join(userData, tableName + '.json');
+  let exists = fs.existsSync(fname);
+
+  if (exists) {
+    try {
+      let table = JSON.parse(fs.readFileSync(fname));
+      callback(true, table[tableName]);
+      return;
+    } catch (e) {
+      callback(false, []);
+      return;
+    }
+  } else {
+    callback(false, []);
+    return;
+  }
+}
+
+/**
+ * Get a specific row from the table
+ * @param  {[string]}   tableName [Table name]
+ * @param  {[int]}   id        [id]
+ * @param  {Function} callback  [Callback function]
+ */
+function getRow(tableName, id, callback) {
+  let fname = path.join(userData, tableName + '.json');
+  let exists = fs.existsSync(fname);
+
+  // Check if the json file exists, if it is, parse it.
+  if (exists) {
+    try {
+      let table = JSON.parse(fs.readFileSync(fname));
+      let rows = table[tableName];
+
+      // Search every row
+      let counter = 0;
+
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].id === id) {
+          counter++;
+          callback(true, rows[i]);
+          break;
+        }
+      }
+    } catch (e) {
+        callback(false, {});
+    }
+  } else {
+    callback(false, {});
+  }
+}
+
 // Export the public available functions
 module.exports = {
   createTable,
-  insertTableContent
+  insertTableContent,
+  getAll,
+  getRow
 };
