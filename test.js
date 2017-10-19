@@ -1,4 +1,4 @@
-const db = require('electron-db');
+const db = require('./index.js');
 const electron = require('electron');
 
 const app = electron.app || electron.remote.app;
