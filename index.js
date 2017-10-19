@@ -4,7 +4,7 @@ const electron = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-const app = electron.app;
+const app = electron.app || electron.remote.app;
 const userData = app.getPath('userData');
 
 
