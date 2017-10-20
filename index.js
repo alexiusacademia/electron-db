@@ -104,14 +104,28 @@ function getAll(tableName, callback) {
 }
 
 /**
- * Get a specific row from the table
- * @param  {[string]}   tableName [Table name]
- * @param  {[int]}   id        [id]
- * @param  {Function} callback  [Callback function]
+ * Get row or rows that matched the given condition(s) in WHERE argument
+ * @param {string} tableName Table name
+ * @param {object} where Collection of conditions to be met
+ * @param {callback} callback Function callback
  */
-function getRow(tableName, id, callback) {
+function getRows(tableName, where, callback) {
   let fname = path.join(userData, tableName + '.json');
   let exists = fs.existsSync(fname);
+  let whereKeys;
+
+  // Check if where is an object
+  if (Object.prototype.toString.call(where) === "[object Object]" ) {
+    // Check for number of keys
+    whereKeys = Object.keys(where);
+    if (whereKeys === 0) {
+      callback(false, "There are no conditions passed to the WHERE clause.");
+      return;
+    }
+  } else {
+    callback(false, "WHERE clause should be an object.");
+    return;
+  }
 
   // Check if the json file exists, if it is, parse it.
   if (exists) {
@@ -119,21 +133,29 @@ function getRow(tableName, id, callback) {
       let table = JSON.parse(fs.readFileSync(fname));
       let rows = table[tableName];
 
-      // Search every row
-      let counter = 0;
+      let objs = [];
 
-      for (var i = 0; i < rows.length; i++) {
-        if (rows[i].id === id) {
-          counter++;
-          callback(true, rows[i]);
-          break;
+      for (let i = 0; i < rows.length; i++) {
+        let matched = 0;    // Number of matched complete where clause
+        for (var j = 0; j < whereKeys.length; j++) {
+          // Test if there is a matched key with where clause
+          if (rows[i].hasOwnProperty(whereKeys[j])) {
+            if (rows[i][whereKeys[j]] === where[whereKeys[j]]) {
+              matched++;
+            }
+          }
+        }
+
+        // Check if all conditions in the WHERE clause are matched
+        if (matched === whereKeys.length) {
+          objs.push(rows[i])
         }
       }
-    } catch (e) {
-        callback(false, {});
+
+      callback(true, objs);
+    }catch (e) {
+      callback(false, e.toString());
     }
-  } else {
-    callback(false, {});
   }
 }
 
@@ -206,6 +228,6 @@ module.exports = {
   createTable,
   insertTableContent,
   getAll,
-  getRow,
+  getRows,
   updateRow
 };
