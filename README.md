@@ -75,8 +75,8 @@ db.insertTableContent('customers', obj, (succ, msg) => {
 
 */
 ```
-### **Get Row from the table**
-Get a row using id.
+### **Get Row(s) from the table**
+Get row or rows that matched the given condition(s) in WHERE argument
 
 ```javascript
 const db = require('electron-db');
@@ -84,15 +84,20 @@ const electron = require('electron');
 
 const app = electron.app || electron.remote.app;
 
-db.getRow('customers', 1508371528701, (succ, obj) => {
+db.getRows('customers', {
+  address: "Paco, Botolan, Zambales",
+  name: 'Alexius Academia'
+}, (succ, result) => {
   console.log("Success: " + succ);
-  console.log("Message: " + obj.name);
+  console.log(result);
 })
 
 /*
 	Output:
     	Success: true
-        Message: Alexius Academia
+        [ { name: 'Alexius Academia',
+    address: 'Paco, Botolan, Zambales',
+    id: 1508419374272 } ]
 */
 ```
 
