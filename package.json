@@ -14,5 +14,11 @@
     "type": "git",
     "url": "https://github.com/alexiusacademia/electron-db"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "keywords": [
+    "electron",
+    "database",
+    "json database",
+    "json table"
+  ]
 }
