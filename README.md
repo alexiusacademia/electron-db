@@ -18,12 +18,14 @@ npm install electron-db
 Creates a json file [table-name].js inside the application userData folder.
 
 ```javascript
+
 const db = require('electron-db');
 const electron = require('electron');
 
 const app = electron.app || electron.remote.app;
 
 db.createTable('customers', (succ, msg) => {
+  // succ - boolean, tells if the call is successful
   console.log("Success: " + succ);
   console.log("Message: " + msg);
 })
@@ -54,6 +56,7 @@ obj.name = "Alexius Academia";
 obj.address = "Paco, Botolan, Zambales";
 
 db.insertTableContent('customers', obj, (succ, msg) => {
+  // succ - boolean, tells if the call is successful
   console.log("Success: " + succ);
   console.log("Message: " + msg);
 })
@@ -75,6 +78,20 @@ db.insertTableContent('customers', obj, (succ, msg) => {
 
 */
 ```
+### **Get all rows**
+Get all the rows for a given table by using the callback function.
+```javascript
+
+const db = require('electron-db');
+const electron = require('electron');
+
+const app = electron.app || electron.remote.app;
+
+db.getAll('customers', (succ, data)) {
+  // succ - boolean, tells if the call is successful
+  // data - array of objects that represents the rows.
+}
+```
 ### **Get Row(s) from the table**
 Get row or rows that matched the given condition(s) in WHERE argument
 
@@ -88,6 +105,7 @@ db.getRows('customers', {
   address: "Paco, Botolan, Zambales",
   name: 'Alexius Academia'
 }, (succ, result) => {
+  // succ - boolean, tells if the call is successful
   console.log("Success: " + succ);
   console.log(result);
 })
@@ -119,6 +137,7 @@ let set = {
 }
 
 db.updateRow('customers', where, set, (succ, msg) => {
+  // succ - boolean, tells if the call is successful
   console.log("Success: " + succ);
   console.log("Message: " + msg);
 });
