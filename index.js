@@ -223,11 +223,63 @@ function updateRow(tableName, where, set, callback) {
   }
 }
 
+/**
+ * 
+ * @param {*} tableName Name of the table to search for
+ * @param {*} field Name of the column/key to match
+ * @param {*} keyword The part of the value of the key that is being lookup
+ * @param {*} callback Callback function
+ */
+function search(tableName, field, keyword, callback) {
+  let fname = path.join(userData, tableName + '.json');
+  let exists = fs.existsSync(fname);
+
+  if (exists) {
+    let table = JSON.parse(fs.readFileSync(fname));
+    let rows = table[tableName];
+
+    if (rows.length > 0) {
+
+      // Declare an empty list
+      let foundRows = [];
+
+      for (var i = 0; i < rows.length; i++) {
+        // Check if key exists
+        if (rows[i].hasOwnProperty(field)) {
+          // Get the index of the search term
+          let value = rows[i][field].toLowerCase();
+          let n = value.search(keyword.toLowerCase());
+          
+          if (n !== -1) {
+            // The substring is found, add object to the list.
+            foundRows.push(rows[i]);
+          }
+
+        }else{
+          callback(false, 2);
+          return;
+        }
+      }
+
+      callback(true, foundRows);
+      return;
+
+    } else {
+      callback(false, 1);
+      return;
+    }
+  } else {
+    callback(false, 0);
+    return;
+  }
+}
+
 // Export the public available functions
 module.exports = {
   createTable,
   insertTableContent,
   getAll,
   getRows,
-  updateRow
+  updateRow,
+  search
 };

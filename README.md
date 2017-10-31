@@ -142,3 +142,30 @@ db.updateRow('customers', where, set, (succ, msg) => {
   console.log("Message: " + msg);
 });
 ```
+
+### **Search Records**
+Search a specific record with a given key/field of the table. This method can search part of a string from a value.
+
+In this example, I have a table named 'customers', each row has a 'name' property. We are now trying to search for a name in the rows that has the substring 'oh' in it.
+
+```javascript
+const db = require('electron-db');
+const electron = require('electron');
+
+const app = electron.app || electron.remote.app;
+
+let term = "oh";
+
+db.search('customers', 'name', term, (succ, data) => {
+  if (succ) {
+    console.log(data);
+  }
+});
+
+// Output
+/*
+[ { name: 'John John Academia',
+    address: 'Paco, Botolan, Zambales',
+    id: 1508419430491 } ]
+*/
+```
