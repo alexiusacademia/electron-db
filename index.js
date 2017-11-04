@@ -1,12 +1,26 @@
 // Load required modules
 const jsonfile = require('jsonfile');
-const electron = require('electron');
+// const electron = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
-const app = electron.app || electron.remote.app;
-const userData = app.getPath('userData');
+// const app = electron.app || electron.remote.app;
+// const userData = app.getPath('userData');
 
+const platform = os.platform();
+
+let appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).name;
+
+let userData = '';
+
+if (platform === 'win32') {
+  userData = path.join(process.env.APPDATA, appName);
+} else if (platform === 'darwin') {
+  userData = path.join(process.env.HOME, 'Library', 'Application Support', appName);
+} else {
+  userData = path.join('var', 'local', appName);
+}
 
 /**
  * Create a table | a json file
