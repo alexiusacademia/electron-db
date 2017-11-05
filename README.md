@@ -5,6 +5,10 @@
 
 **electron-db** is a module to have a database-like functions to simulate table manipulation on data. The data is saved as a json flat file.
 
+The json file is saved on the application folder. 
+
+**Important:** The script that uses this library should be run with electron command first in order to create the direction on the user data folder. The name that will be used for the app directory will be what was indicated in the package.json as <em>productName</em>. If this is not set, the <em>name</em> property will be used.
+
 [![Build Status](https://travis-ci.org/alexiusacademia/electron-db.svg?branch=master)](https://travis-ci.org/alexiusacademia/electron-db)
 
 ### **Installation**

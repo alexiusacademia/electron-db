@@ -1,6 +1,6 @@
 // Load required modules
 const jsonfile = require('jsonfile');
-// const electron = require('electron');
+const electron = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -10,7 +10,12 @@ const os = require('os');
 
 const platform = os.platform();
 
-let appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).name;
+let appName = '';
+if (JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName) {
+  appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName;
+}else{
+  appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).name;
+}
 
 let userData = '';
 
