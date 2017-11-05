@@ -1,6 +1,5 @@
 // Load required modules
 const jsonfile = require('jsonfile');
-// const electron = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');

@@ -10,8 +10,7 @@
   "author": "Alexius Academia <alexius.academia@gmail.com> (https://alexiusacademia.com)",
   "license": "MIT",
   "dependencies": {
-    "jsonfile": "^4.0.0",
-    "electron": "*"
+    "jsonfile": "^4.0.0"
   },
   "repository": {
     "type": "git",
