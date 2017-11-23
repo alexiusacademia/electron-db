@@ -173,3 +173,17 @@ db.search('customers', 'name', term, (succ, data) => {
     id: 1508419430491 } ]
 */
 ```
+
+### **Delete Records**
+Delete a scecific record with a given key-value pair from the table.
+
+```javascript
+
+const db = require('electron-db');
+const electron = require('electron');
+
+db.deleteRow('customers', {'id': 1508419374272}, (succ, msg) => {
+  console.log(msg);
+});
+
+```

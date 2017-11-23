@@ -1,5 +1,6 @@
 // Load required modules
 const jsonfile = require('jsonfile');
+const electron = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -292,6 +293,64 @@ function search(tableName, field, keyword, callback) {
   }
 }
 
+function deleteRow(tableName, where, callback) {
+  let fname = path.join(userData, tableName + '.json');
+  let exists = fs.existsSync(fname);
+
+  let whereKeys = Object.keys(where);
+
+  if (exists) {
+    let table = JSON.parse(fs.readFileSync(fname));
+    let rows = table[tableName];
+
+    if (rows.length > 0) {
+      for (let i = 0; i < rows.length; i++) {
+        // Iterate throught the rows
+        let matched = 0;
+        let matchedIndices = [];
+
+        for (var j = 0; j < whereKeys.length; j++) {
+          // Test if there is a matched key with where clause and single row of table
+          if (rows[i].hasOwnProperty(whereKeys[j])) {
+            if (rows[i][whereKeys[j]] === where[whereKeys]) {
+              matched++;
+              matchedIndices.push(i);
+            }
+          }
+        }
+
+        for (let i = 0; i < matchedIndices.length; i++) {
+          rows.splice(matchedIndices[i], 1);
+        }
+
+      }
+
+      // Create a new object and pass the rows
+      let obj = new Object();
+      obj[tableName] = rows;
+
+      console.log(rows);
+
+      // Write the object to json file
+      try {
+        jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
+          
+        });
+        callback(true, "Row(s) deleted successfully!")
+        return;
+      } catch (e) {
+        callback(false, e.toString());
+        return;
+      }
+
+    } else {
+      callback(false, 'Table is empty!');
+      return;
+    }
+  }
+  
+}
+
 // Export the public available functions
 module.exports = {
   createTable,
@@ -299,5 +358,6 @@ module.exports = {
   getAll,
   getRows,
   updateRow,
-  search
+  search,
+  deleteRow
 };
