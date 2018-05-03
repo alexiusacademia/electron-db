@@ -5,7 +5,20 @@
 
 **electron-db** is a module to have a database-like functions to simulate table manipulation on data. The data is saved as a json flat file.
 
-The json file is saved on the application folder. 
+The json file is saved on the application folder.
+
+The table format contained in the table_name.json should be in the for of
+```
+{
+  "table_name": [
+    {
+      "field1": "Value of field 1",
+      "field2": "Value of field 2",
+      ...
+    }
+  ]
+}
+```
 
 **Important:** The script that uses this library should be run with electron command first in order to create the direction on the user data folder. The name that will be used for the app directory will be what was indicated in the package.json as <em>productName</em>. If this is not set, the <em>name</em> property will be used.
 
@@ -38,7 +51,7 @@ db.createTable('customers', (succ, msg) => {
 	Output:
     	Success: true
         Message: Success!
-        
+
 	Result file (customers.json):
     {
     	"customers": []
@@ -69,7 +82,7 @@ db.insertTableContent('customers', obj, (succ, msg) => {
 	Output:
     	Success: true
         Message: Object written successfully!
-       
+
     Result file (customers.json):
     {
       "customers": [
