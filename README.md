@@ -200,3 +200,5 @@ db.deleteRow('customers', {'id': 1508419374272}, (succ, msg) => {
 });
 
 ```
+
+For contributions, please see the CONTRIBUTE.md file. Thank you.
