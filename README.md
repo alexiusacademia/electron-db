@@ -23,6 +23,7 @@ The table format contained in the table_name.json should be in the for of
 **Important:** The script that uses this library should be run with electron command first in order to create the directory on the user data folder. The name that will be used for the app directory will be what was indicated in the package.json as <em>productName</em>. If this is not set, the <em>name</em> property will be used.
 
 [![Build Status](https://travis-ci.org/alexiusacademia/electron-db.svg?branch=master)](https://travis-ci.org/alexiusacademia/electron-db)
+[![NPM](https://nodei.co/npm-dl/electron-db.png?months=1)](https://nodei.co/npm/electron-db/)
 
 ### **Installation**
 
