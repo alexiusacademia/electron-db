@@ -234,17 +234,23 @@ function updateRow(tableName, where, set, callback) {
             return;
           } catch (e) {
             callback(false, e.toString());
+            return;
           }
 
           callback(true, rows);
         } catch (e) {
           callback(false, e.toString());
+          return;
         }
       } else {
-        callback(false, "Cannot find the specified record.")
+        callback(false, "Cannot find the specified record.");
+        return;
       }
 
     }
+  } else {
+    callback(false, "JSON file does not exist.");
+    return;
   }
 }
 
