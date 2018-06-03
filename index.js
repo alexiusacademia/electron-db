@@ -341,8 +341,6 @@ function deleteRow(tableName, where, callback) {
       let obj = new Object();
       obj[tableName] = rows;
 
-      console.log(rows);
-
       // Write the object to json file
       try {
         jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
@@ -359,6 +357,9 @@ function deleteRow(tableName, where, callback) {
       callback(false, 'Table is empty!');
       return;
     }
+  } else {
+    callback(false, "JSON file does not exist.");
+    return;
   }
 
 }
