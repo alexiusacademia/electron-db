@@ -96,6 +96,7 @@ function insertTableContent(tableName, tableRow, callback) {
     }
   }
   callback(false, "Table/json file doesn't exist!");
+  return;
 }
 
 /**
@@ -172,9 +173,14 @@ function getRows(tableName, where, callback) {
       }
 
       callback(true, objs);
+      return;
     }catch (e) {
       callback(false, e.toString());
+      return;
     }
+  } else {
+    callback(false, "JSON file does not exist.");
+    return;
   }
 }
 
@@ -243,7 +249,7 @@ function updateRow(tableName, where, set, callback) {
 }
 
 /**
- * 
+ *
  * @param {*} tableName Name of the table to search for
  * @param {*} field Name of the column/key to match
  * @param {*} keyword The part of the value of the key that is being lookup
@@ -268,7 +274,7 @@ function search(tableName, field, keyword, callback) {
           // Get the index of the search term
           let value = rows[i][field].toLowerCase();
           let n = value.search(keyword.toLowerCase());
-          
+
           if (n !== -1) {
             // The substring is found, add object to the list.
             foundRows.push(rows[i]);
@@ -334,7 +340,7 @@ function deleteRow(tableName, where, callback) {
       // Write the object to json file
       try {
         jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
-          
+
         });
         callback(true, "Row(s) deleted successfully!")
         return;
@@ -348,7 +354,7 @@ function deleteRow(tableName, where, callback) {
       return;
     }
   }
-  
+
 }
 
 // Export the public available functions
