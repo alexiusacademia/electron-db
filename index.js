@@ -42,7 +42,7 @@ function createTable(tableName, callback) {
     // The file exists, do not recreate the table/json file
     callback(false, tableName + '.json already exists!');
     return;
-  }else{
+  } else {
     // Create an empty object and pass an empty array as value
     let obj = new Object();
     obj[tableName] = [];
@@ -52,7 +52,7 @@ function createTable(tableName, callback) {
       jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
         // console.log(err);
       });
-      callback(true, "Success!")
+      callback(true, "Success!");
       return;
     } catch (e) {
       callback(false, e.toString());
@@ -97,7 +97,7 @@ function insertTableContent(tableName, tableRow, callback) {
   }
   callback(false, "Table/json file doesn't exist!");
   return;
-<<<<<<< HEAD
+
 }
 
 function insertTableContents(tableName, tableRows, callback) {
@@ -151,8 +151,6 @@ function insertTableContents(tableName, tableRows, callback) {
     callback(false, "Table/json file doesn't exist!");
     return;
   }
-=======
->>>>>>> 5b1f4556c434e6c4b2a8e2af960e4c73044a5bc3
 }
 
 /**
