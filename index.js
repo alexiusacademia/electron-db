@@ -50,7 +50,7 @@ function createTable(tableName, callback) {
     // Write the object to json file
     try {
       jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
-        console.log(err);
+        // console.log(err);
       });
       callback(true, "Success!")
       return;
@@ -97,6 +97,62 @@ function insertTableContent(tableName, tableRow, callback) {
   }
   callback(false, "Table/json file doesn't exist!");
   return;
+<<<<<<< HEAD
+}
+
+function insertTableContents(tableName, tableRows, callback) {
+  let fname = path.join(userData, tableName + '.json');
+  let exists = fs.existsSync(fname);
+
+  if (exists) {
+    if (tableRows.length === 0) {
+      callback(false, "Empty array of rows. Please provide minimum of one record (object).");
+      return ;
+    } else {
+      // Delay function
+      function delay() {
+        return new Promise(resolve => setTimeout(resolve, 10));
+      }
+
+      // Async function
+      async function delayedAction(item) {
+        await delay();
+
+        // Insert the data/object
+        // Table | json parsed
+        let table = JSON.parse(fs.readFileSync(fname));
+
+        let date = new Date();
+        let id = date.getTime();
+        item['id'] = id;
+
+        table[tableName].push(item);
+        try {
+          jsonfile.writeFile(fname, table, {spaces: 2}, function (err){
+            //console.log(err);
+          });
+          callback(true, "Object written successfully!");
+          return;
+        } catch (e) {
+          callback(false, "Error writing object.");
+          return;
+        }
+      }
+
+      async function insertData(rows) {
+        for (const row of rows) {
+          await delayedAction(row);
+        }
+      }
+
+      insertData(tableRows);
+    }
+  } else {
+    callback(false, "Table/json file doesn't exist!");
+    return;
+  }
+=======
+>>>>>>> 5b1f4556c434e6c4b2a8e2af960e4c73044a5bc3
 }
 
 /**
@@ -368,6 +424,7 @@ function deleteRow(tableName, where, callback) {
 module.exports = {
   createTable,
   insertTableContent,
+  insertTableContents,
   getAll,
   getRows,
   updateRow,
