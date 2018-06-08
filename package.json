@@ -21,6 +21,8 @@
     "electron",
     "database",
     "json database",
-    "json table"
+    "json table",
+    "electron database",
+    "electron simple database"
   ]
 }
