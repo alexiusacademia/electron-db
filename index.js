@@ -97,6 +97,7 @@ function insertTableContent(tableName, tableRow, callback) {
   }
   callback(false, "Table/json file doesn't exist!");
   return;
+<<<<<<< HEAD
 }
 
 function insertTableContents(tableName, tableRows, callback) {
@@ -150,6 +151,8 @@ function insertTableContents(tableName, tableRows, callback) {
     callback(false, "Table/json file doesn't exist!");
     return;
   }
+=======
+>>>>>>> 5b1f4556c434e6c4b2a8e2af960e4c73044a5bc3
 }
 
 /**

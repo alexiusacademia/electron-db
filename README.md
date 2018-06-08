@@ -1,6 +1,8 @@
 # electron-db
 ---
-
+[![Build Status](https://travis-ci.org/alexiusacademia/electron-db.svg?branch=master)](https://travis-ci.org/alexiusacademia/electron-db)
+[![NPM version](https://img.shields.io/npm/v/electron-db.svg)](https://npmjs.org/package/electron-db "View this project on NPM")
+[![NPM downloads](https://img.shields.io/npm/dm/electron-db.svg)](https://npmjs.org/package/electron-db "View this project on NPM")
 > Database-like solution in electron apps
 
 **electron-db** is a module to have a database-like functions to simulate table manipulation on data. The data is saved as a json flat file.
@@ -20,9 +22,7 @@ The table format contained in the table_name.json should be in the for of
 }
 ```
 
-**Important:** The script that uses this library should be run with electron command first in order to create the direction on the user data folder. The name that will be used for the app directory will be what was indicated in the package.json as <em>productName</em>. If this is not set, the <em>name</em> property will be used.
-
-[![Build Status](https://travis-ci.org/alexiusacademia/electron-db.svg?branch=master)](https://travis-ci.org/alexiusacademia/electron-db)
+**Important:** The script that uses this library should be run with electron command first in order to create the directory on the user data folder. The name that will be used for the app directory will be what was indicated in the package.json as <em>productName</em>. If this is not set, the <em>name</em> property will be used.
 
 ### **Installation**
 
@@ -237,3 +237,5 @@ db.deleteRow('customers', {'id': 1508419374272}, (succ, msg) => {
 });
 
 ```
+
+For contributions, please see the CONTRIBUTE.md file. Thank you.
