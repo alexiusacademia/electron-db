@@ -95,6 +95,43 @@ db.insertTableContent('customers', obj, (succ, msg) => {
 
 */
 ```
+
+### **Inserting Multiple Objects/Data to Table**
+Insert multiple objects into the list of row/data of the table.
+
+```javascript
+const db = require('electron-db');
+
+const arr = ['product_1', 'product_2', 'product_3', 'product_4', 'product_5'];
+
+const m = arr.map((product, id) => {
+  const obj = {}
+  obj.image_name = product;
+  obj.index = id;
+
+  return obj;
+});
+
+db.insertTableContents('records', m, (isSuccess, message) => {
+  console.log(isSuccess);
+  console.log(message);
+});
+
+/*
+	Output:
+    	true
+      Object written successfully!
+      true
+      Object written successfully!
+      true
+      Object written successfully!
+      true
+      Object written successfully!
+      true
+      Object written successfully!
+*/
+```
+
 ### **Get all rows**
 Get all the rows for a given table by using the callback function.
 ```javascript
