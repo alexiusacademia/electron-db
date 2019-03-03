@@ -34,10 +34,12 @@ npm install electron-db
 ### **Creating Table**
 Creates a json file [table-name].js inside the application userData folder.
 
+In Windows, the application folder should be in C:\Users\[username]\AppData\Roaming\[application name]
+
 ```javascript
 
 const db = require('electron-db');
-const electron = require('electron');
+const { app, BrowserWindow } = require("electron");
 
 const app = electron.app || electron.remote.app;
 
