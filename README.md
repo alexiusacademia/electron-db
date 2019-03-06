@@ -9,7 +9,7 @@
 
 The json file is saved on the application folder.
 
-The table format contained in the table_name.json should be in the for of
+The table format contained in the table_name.json should be in the form of
 ```
 {
   "table_name": [
@@ -22,7 +22,7 @@ The table format contained in the table_name.json should be in the for of
 }
 ```
 
-**Important:** The script that uses this library should be run with electron command first in order to create the directory on the user data folder. The name that will be used for the app directory will be what was indicated in the package.json as <em>productName</em>. If this is not set, the <em>name</em> property will be used.
+**Important:** The script that uses this library should be run with electron command first in order to create the directory on the user data folder. The name that will be used for the app directory will be what was indicated in the `package.json` as <em>productName</em>. If this is not set, the <em>name</em> property will be used.
 
 ### **Installation**
 
@@ -32,9 +32,9 @@ npm install electron-db
 ```
 
 ### **Creating Table**
-Creates a json file [table-name].js inside the application userData folder.
+Creates a json file [table-name].js inside the application `userData folder.
 
-In Windows, the application folder should be in C:\Users\[username]\AppData\Roaming\[application name]
+In Windows, the application folder should be in `C:\Users\[username]\AppData\Roaming\[application name]`
 
 ```javascript
 
@@ -227,7 +227,7 @@ db.search('customers', 'name', term, (succ, data) => {
 ```
 
 ### **Delete Records**
-Delete a scecific record with a given key-value pair from the table.
+Delete a specific record with a given key-value pair from the table.
 
 ```javascript
 
@@ -240,4 +240,4 @@ db.deleteRow('customers', {'id': 1508419374272}, (succ, msg) => {
 
 ```
 
-For contributions, please see the CONTRIBUTE.md file. Thank you.
+For contributions, please see the `CONTRIBUTE.md file. Thank you.
