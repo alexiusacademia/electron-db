@@ -143,10 +143,10 @@ const electron = require('electron');
 
 const app = electron.app || electron.remote.app;
 
-db.getAll('customers', (succ, data)) {
+db.getAll('customers', (succ, data) => {
   // succ - boolean, tells if the call is successful
   // data - array of objects that represents the rows.
-}
+})
 ```
 ### **Get Row(s) from the table**
 Get row or rows that matched the given condition(s) in WHERE argument
