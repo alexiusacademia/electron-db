@@ -27,6 +27,7 @@ if (platform === 'win32') {
   userData = path.join('var', 'local', appName);
 }
 
+
 /**
  * Create a table | a json file
  * @param  {[string]} tableName [Table name]
@@ -42,7 +43,7 @@ function createTable(tableName, callback) {
     // The file exists, do not recreate the table/json file
     callback(false, tableName + '.json already exists!');
     return;
-  } else {
+  }else{
     // Create an empty object and pass an empty array as value
     let obj = new Object();
     obj[tableName] = [];
@@ -50,9 +51,45 @@ function createTable(tableName, callback) {
     // Write the object to json file
     try {
       jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
-        // console.log(err);
+        console.log(err);
       });
-      callback(true, "Success!");
+      callback(true, "Success!")
+      return;
+    } catch (e) {
+      callback(false, e.toString());
+    }
+
+  }
+}
+
+/**
+ * Create a table | a json file
+ * @param  {[string]} tableName [Table name]
+ * @param  {[string]} location [Path to the prefered location of the database file]
+ * (location could be '/Users/<username>/Desktop' on my Mac)
+ */
+function createTable(tableName, location, callback) {
+  // Define the filename
+  let fname = path.join(location, tableName + '.json');
+
+  // Check if the file with the tablename.json exists
+  let exists = fs.existsSync(fname);
+
+  if (exists) {
+    // The file exists, do not recreate the table/json file
+    callback(false, tableName + '.json already exists!');
+    return;
+  }else{
+    // Create an empty object and pass an empty array as value
+    let obj = new Object();
+    obj[tableName] = [];
+
+    // Write the object to json file
+    try {
+      jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
+        console.log(err);
+      });
+      callback(true, "Success!")
       return;
     } catch (e) {
       callback(false, e.toString());
@@ -86,7 +123,7 @@ function insertTableContent(tableName, tableRow, callback) {
 
     try {
       jsonfile.writeFile(fname, table, {spaces: 2}, function (err){
-        console.log(err);
+        console.log("Error: " + err);
       });
       callback(true, "Object written successfully!");
       return;
@@ -96,61 +133,6 @@ function insertTableContent(tableName, tableRow, callback) {
     }
   }
   callback(false, "Table/json file doesn't exist!");
-  return;
-
-}
-
-function insertTableContents(tableName, tableRows, callback) {
-  let fname = path.join(userData, tableName + '.json');
-  let exists = fs.existsSync(fname);
-
-  if (exists) {
-    if (tableRows.length === 0) {
-      callback(false, "Empty array of rows. Please provide minimum of one record (object).");
-      return ;
-    } else {
-      // Delay function
-      function delay() {
-        return new Promise(resolve => setTimeout(resolve, 10));
-      }
-
-      // Async function
-      async function delayedAction(item) {
-        await delay();
-
-        // Insert the data/object
-        // Table | json parsed
-        let table = JSON.parse(fs.readFileSync(fname));
-
-        let date = new Date();
-        let id = date.getTime();
-        item['id'] = id;
-
-        table[tableName].push(item);
-        try {
-          jsonfile.writeFile(fname, table, {spaces: 2}, function (err){
-            //console.log(err);
-          });
-          callback(true, "Object written successfully!");
-          return;
-        } catch (e) {
-          callback(false, "Error writing object.");
-          return;
-        }
-      }
-
-      async function insertData(rows) {
-        for (const row of rows) {
-          await delayedAction(row);
-        }
-      }
-
-      insertData(tableRows);
-    }
-  } else {
-    callback(false, "Table/json file doesn't exist!");
-    return;
-  }
 }
 
 /**
@@ -227,14 +209,9 @@ function getRows(tableName, where, callback) {
       }
 
       callback(true, objs);
-      return;
     }catch (e) {
       callback(false, e.toString());
-      return;
     }
-  } else {
-    callback(false, "JSON file does not exist.");
-    return;
   }
 }
 
@@ -256,60 +233,49 @@ function updateRow(tableName, where, set, callback) {
     let table = JSON.parse(fs.readFileSync(fname));
     let rows = table[tableName];
 
-    let matched = 0;    // Number of matched complete where clause
-
-    let matchedIndex = 0;
-
     for (var i = 0; i < rows.length; i++) {
-      
+      let matched = 0;    // Number of matched complete where clause
       for (var j = 0; j < whereKeys.length; j++) {
         // Test if there is a matched key with where clause and single row of table
         if (rows[i].hasOwnProperty(whereKeys[j])) {
-          if (rows[i][whereKeys[j]] === where[whereKeys[j]]) {
+          if (rows[i][whereKeys[j]] === where[whereKeys]) {
             matched++;
-            matchedIndex = i;
           }
         }
       }
-    }
 
-    if (matched === whereKeys.length) {
-      // All field from where clause are present in this particular
-      // row of the database table
-      try {
-        for (var k = 0; k < setKeys.length; k++) {
-          rows[matchedIndex][setKeys[k]] = set[setKeys[k]];
-        }
-
-        // Create a new object and pass the rows
-        let obj = new Object();
-        obj[tableName] = rows;
-
-        // Write the object to json file
+      if (matched === whereKeys.length) {
+        // All field from where clause are present in this particular
+        // row of the database table
         try {
-          jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
-            console.log(err);
-          });
-          callback(true, "Success!")
-          return;
+          for (var k = 0; k < setKeys.length; k++) {
+            rows[i][setKeys[k]] = set[setKeys[k]];
+          }
+
+          // Create a new object and pass the rows
+          let obj = new Object();
+          obj[tableName] = rows;
+
+          // Write the object to json file
+          try {
+            jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
+              console.log(err);
+            });
+            callback(true, "Success!")
+            return;
+          } catch (e) {
+            callback(false, e.toString());
+          }
+
+          callback(true, rows);
         } catch (e) {
           callback(false, e.toString());
-          return;
         }
-
-        callback(true, rows);
-      } catch (e) {
-        callback(false, e.toString());
-        return;
+      } else {
+        callback(false, "Cannot find the specified record.")
       }
-    } else {
-      callback(false, "Cannot find the specified record.");
-      return;
-    }
 
-  } else {
-    callback(false, "JSON file does not exist.");
-    return;
+    }
   }
 }
 
@@ -400,6 +366,8 @@ function deleteRow(tableName, where, callback) {
       let obj = new Object();
       obj[tableName] = rows;
 
+      console.log(rows);
+
       // Write the object to json file
       try {
         jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
@@ -416,9 +384,6 @@ function deleteRow(tableName, where, callback) {
       callback(false, 'Table is empty!');
       return;
     }
-  } else {
-    callback(false, "JSON file does not exist.");
-    return;
   }
 
 }
@@ -427,7 +392,6 @@ function deleteRow(tableName, where, callback) {
 module.exports = {
   createTable,
   insertTableContent,
-  insertTableContents,
   getAll,
   getRows,
   updateRow,
