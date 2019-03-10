@@ -60,6 +60,16 @@ db.createTable('customers', (succ, msg) => {
     }
 */
 ```
+
+### **Creating Table specifying the Location**
+```javascript
+db.createTable('customers', 'C:\databases', (succ, msg) => {
+  // succ - boolean, tells if the call is successful
+  console.log("Success: " + succ);
+  console.log("Message: " + msg);
+})
+```
+
 ### **Inserting Object/Data to Table**
 Insert an object into the list of row/data of the table.
 
