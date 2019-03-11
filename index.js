@@ -68,9 +68,9 @@ function createTable(tableName, callback) {
  * @param  {[string]} location [Path to the prefered location of the database file]
  * (location could be '/Users/<username>/Desktop' on my Mac)
  */
-function createTable(tableName, location, callback) {
+function createTableAt(tableName, location, callback) {
   // Define the filename
-  let fname = path.join(location, tableName + '.json');
+  let fname = location + tableName + '.json';
 
   // Check if the file with the tablename.json exists
   let exists = fs.existsSync(fname);
@@ -233,49 +233,58 @@ function updateRow(tableName, where, set, callback) {
     let table = JSON.parse(fs.readFileSync(fname));
     let rows = table[tableName];
 
+    let matched = 0;    // Number of matched complete where clause
+    let matchedIndex = 0;
+
     for (var i = 0; i < rows.length; i++) {
-      let matched = 0;    // Number of matched complete where clause
+      
       for (var j = 0; j < whereKeys.length; j++) {
         // Test if there is a matched key with where clause and single row of table
         if (rows[i].hasOwnProperty(whereKeys[j])) {
-          if (rows[i][whereKeys[j]] === where[whereKeys]) {
+          if (rows[i][whereKeys[j]] === where[whereKeys[j]]) {
             matched++;
+            matchedIndex = i;
           }
         }
       }
+    }
 
-      if (matched === whereKeys.length) {
-        // All field from where clause are present in this particular
-        // row of the database table
+    if (matched === whereKeys.length) {
+      // All field from where clause are present in this particular
+      // row of the database table
+      try {
+        for (var k = 0; k < setKeys.length; k++) {
+          // rows[i][setKeys[k]] = set[setKeys[k]];
+          rows[matchedIndex][setKeys[k]] = set[setKeys[k]];
+        }
+
+        // Create a new object and pass the rows
+        let obj = new Object();
+        obj[tableName] = rows;
+
+        // Write the object to json file
         try {
-          for (var k = 0; k < setKeys.length; k++) {
-            rows[i][setKeys[k]] = set[setKeys[k]];
-          }
-
-          // Create a new object and pass the rows
-          let obj = new Object();
-          obj[tableName] = rows;
-
-          // Write the object to json file
-          try {
-            jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
-              console.log(err);
-            });
-            callback(true, "Success!")
-            return;
-          } catch (e) {
-            callback(false, e.toString());
-          }
-
-          callback(true, rows);
+          jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
+            console.log(err);
+          });
+          callback(true, "Success!")
+          return;
         } catch (e) {
           callback(false, e.toString());
+          return;
         }
-      } else {
-        callback(false, "Cannot find the specified record.")
-      }
 
+        callback(true, rows);
+      } catch (e) {
+        callback(false, e.toString());
+        return;
+      }
+    } else {
+      callback(false, "Cannot find the specified record.");
+      return;
     }
+
+
   }
 }
 
@@ -391,6 +400,7 @@ function deleteRow(tableName, where, callback) {
 // Export the public available functions
 module.exports = {
   createTable,
+  createTableAt,
   insertTableContent,
   getAll,
   getRows,
