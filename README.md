@@ -105,6 +105,10 @@ db.insertTableContent('customers', obj, (succ, msg) => {
 */
 ```
 
+### For the database table at custom location
+For the implementation of this new feature, always put the location string as second argument for all the functions. (The directory string must ended with appropriate slashes, forward slash for unix and back slash with escape string for Windows) (e.g. Windows: ```'C:\\databases\\'```, Unix: ```'/Users/<username>/Desktop/'```)
+
+<!--
 ### **Inserting Multiple Objects/Data to Table**
 Insert multiple objects into the list of row/data of the table.
 
@@ -140,7 +144,7 @@ db.insertTableContents('records', m, (isSuccess, message) => {
       Object written successfully!
 */
 ```
-
+-->
 ### **Get all rows**
 Get all the rows for a given table by using the callback function.
 ```javascript
