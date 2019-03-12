@@ -87,7 +87,7 @@ function createTable() {
  */
 // function insertTableContent(tableName, tableRow, callback) {
 function insertTableContent() {
-
+  let tableName = arguments[0];
   var fname = '';
   var callback;
   var tableRow;
@@ -100,8 +100,6 @@ function insertTableContent() {
     callback = arguments[3];
     tableRow = arguments[2];
   }
-
-  let tableName = arguments[0];
 
   let exists = fs.existsSync(fname);
 
