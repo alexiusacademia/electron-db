@@ -7,7 +7,9 @@
 
 **electron-db** is a module to have a database-like functions to simulate table manipulation on data. The data is saved as a json flat file.
 
-The json file is saved on the application folder.
+The json file is saved on the application folder by default. From version 0.10.0, the user has the option to save the database table anywhere they chose.
+
+The only difference with the default location is that the user have to pass the string location as the second argument to any function to be used.
 
 The table format contained in the table_name.json should be in the form of
 ```
