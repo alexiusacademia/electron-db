@@ -41,8 +41,6 @@ In Windows, the application folder should be in `C:\Users\[username]\AppData\Roa
 const db = require('electron-db');
 const { app, BrowserWindow } = require("electron");
 
-const app = electron.app || electron.remote.app;
-
 db.createTable('customers', (succ, msg) => {
   // succ - boolean, tells if the call is successful
   console.log("Success: " + succ);
@@ -62,8 +60,9 @@ db.createTable('customers', (succ, msg) => {
 ```
 
 ### **Creating Table specifying the Location**
+The custom location, if desired, shall be passed as the second aregument.
 ```javascript
-db.createTable('customers', 'C:\databases', (succ, msg) => {
+db.createTable('customers', 'C:\\databases\\', (succ, msg) => {
   // succ - boolean, tells if the call is successful
   console.log("Success: " + succ);
   console.log("Message: " + msg);
@@ -73,12 +72,10 @@ db.createTable('customers', 'C:\databases', (succ, msg) => {
 ### **Inserting Object/Data to Table**
 Insert an object into the list of row/data of the table.
 
+To insert to a custom location, pass the custom location as the second argument
+as shown in the sample above.
+
 ```javascript
-const db = require('electron-db');
-const electron = require('electron');
-
-const app = electron.app || electron.remote.app;
-
 let obj = new Object();
 
 obj.name = "Alexius Academia";
