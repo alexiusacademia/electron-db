@@ -133,8 +133,8 @@ function insertTableContent() {
  * @param  {string} arguments[1] [Location of the database file] (Optional)
  * @param  {Function} callback  [callback]
  */
-// function getAll(tableName, callback) {
-function getAll() {
+function getAll(tableName, callback) {
+// function getAll() {
   let fname = path.join(userData, tableName + '.json');
   let exists = fs.existsSync(fname);
 
