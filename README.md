@@ -11,7 +11,7 @@ The json file is saved on the application folder by default. From version 0.10.0
 
 The only difference with the default location is that the user have to pass the string location as the second argument to any function to be used.
 
-The table format contained in the table_name.json should be in the form of
+The table format contained in the `table_name.json` should be in the form of
 ```
 {
   "table_name": [
@@ -253,4 +253,4 @@ db.deleteRow('customers', {'id': 1508419374272}, (succ, msg) => {
 
 ```
 
-For contributions, please see the `CONTRIBUTE.md file. Thank you.
+For contributions, please see the `CONTRIBUTE.md` file. Thank you.
