@@ -4,18 +4,20 @@ const jsonfile = require('jsonfile');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const pack = require('../../package.json')
 
 // const app = electron.app || electron.remote.app;
 // const userData = app.getPath('userData');
 
 const platform = os.platform();
 
-let appName = '';
-if (JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName) {
+let appName = pack.name
+
+/* if (JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName) {
   appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName;
 }else{
   appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).name;
-}
+} */
 
 let userData = '';
 
@@ -41,8 +43,8 @@ function createTable() {
   tableName = arguments[0];
   var fname = '';
   var callback;
-  if (arguments.length === 2){
-    
+  if (arguments.length === 2) {
+
     callback = arguments[1];
     fname = path.join(userData, tableName + '.json');
   } else if (arguments.length === 3) {
@@ -57,23 +59,45 @@ function createTable() {
     // The file exists, do not recreate the table/json file
     callback(false, tableName + '.json already exists!');
     return;
-  }else{
+  } else {
     // Create an empty object and pass an empty array as value
     let obj = new Object();
     obj[tableName] = [];
 
     // Write the object to json file
     try {
-      jsonfile.writeFileSync(fname, obj, {spaces: 2}, function (err){
-        // console.log(err);
-      });
+      fs.writeFile(fname, JSON.stringify(obj, null, 2), (err) => {
+
+      })
       callback(true, "Success!")
       return;
     } catch (e) {
       callback(false, e.toString());
+      return;
     }
 
   }
+}
+
+function valid() {
+  var fName = ''
+  if (arguments.length == 2) {
+    // Given the database name and location
+    const dbName = arguments[0]
+    const dbLocation = arguments[1]
+    var fName = dbLocation + dbName + '.json'
+  } else if (arguments.length == 1) {
+    const dbName = arguments[0]
+    fname = path.join(userData, dbName + '.json')
+  }
+
+  const content = fs.readFileSync(fName, 'utf-8')
+  try {
+    JSON.parse(content)
+  } catch (e) {
+    return false
+  }
+  return true
 }
 
 /**
@@ -114,7 +138,7 @@ function insertTableContent() {
     table[tableName].push(tableRow);
 
     try {
-      jsonfile.writeFileSync(fname, table, {spaces: 2}, function (err){
+      jsonfile.writeFileSync(fname, table, { spaces: 2 }, function (err) {
         // console.log("Error: " + err);
       });
       callback(true, "Object written successfully!");
@@ -194,7 +218,7 @@ function getRows() {
   let whereKeys;
 
   // Check if where is an object
-  if (Object.prototype.toString.call(where) === "[object Object]" ) {
+  if (Object.prototype.toString.call(where) === "[object Object]") {
     // Check for number of keys
     whereKeys = Object.keys(where);
     if (whereKeys === 0) {
@@ -233,7 +257,7 @@ function getRows() {
 
       callback(true, objs);
       return;
-    }catch (e) {
+    } catch (e) {
       callback(false, e.toString());
       return;
     }
@@ -284,7 +308,7 @@ function updateRow() {
     let matchedIndex = 0;
 
     for (var i = 0; i < rows.length; i++) {
-      
+
       for (var j = 0; j < whereKeys.length; j++) {
         // Test if there is a matched key with where clause and single row of table
         if (rows[i].hasOwnProperty(whereKeys[j])) {
@@ -311,7 +335,7 @@ function updateRow() {
 
         // Write the object to json file
         try {
-          jsonfile.writeFileSync(fname, obj, {spaces: 2}, function (err){
+          jsonfile.writeFileSync(fname, obj, { spaces: 2 }, function (err) {
             console.log(err);
           });
           callback(true, "Success!")
@@ -372,7 +396,7 @@ function search() {
   if (exists) {
     let table = JSON.parse(fs.readFileSync(fname));
     let rows = table[tableName];
-    
+
     if (rows.length > 0) {
 
       // Declare an empty list
@@ -391,7 +415,7 @@ function search() {
             foundRows.push(rows[i]);
           }
 
-        }else{
+        } else {
           callback(false, 2);
           return;
         }
@@ -446,7 +470,7 @@ function deleteRow() {
     if (rows.length > 0) {
       let matched = 0;
       let matchedIndices = [];
-      
+
       for (let i = 0; i < rows.length; i++) {
         // Iterate throught the rows
         for (var j = 0; j < whereKeys.length; j++) {
@@ -475,7 +499,7 @@ function deleteRow() {
 
       // Write the object to json file
       try {
-        jsonfile.writeFileSync(fname, obj, {spaces: 2}, function (err){
+        jsonfile.writeFileSync(fname, obj, { spaces: 2 }, function (err) {
 
         });
         callback(true, "Row(s) deleted successfully!")
@@ -504,5 +528,6 @@ module.exports = {
   getRows,
   updateRow,
   search,
-  deleteRow
+  deleteRow,
+  valid
 };
