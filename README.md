@@ -75,7 +75,7 @@ db.createTable('customers', 'C:\\databases\\', (succ, msg) => {
 Insert an object into the list of row/data of the table.
 
 To insert to a custom location, pass the custom location as the second argument
-as shown in the sample above.
+as shown in the sample above. But do not forget to check if the database is valid.
 
 ```javascript
 let obj = new Object();
@@ -83,11 +83,13 @@ let obj = new Object();
 obj.name = "Alexius Academia";
 obj.address = "Paco, Botolan, Zambales";
 
-db.insertTableContent('customers', obj, (succ, msg) => {
-  // succ - boolean, tells if the call is successful
-  console.log("Success: " + succ);
-  console.log("Message: " + msg);
-})
+if (db.valid('customers')) {
+  db.insertTableContent('customers', obj, (succ, msg) => {
+    // succ - boolean, tells if the call is successful
+    console.log("Success: " + succ);
+    console.log("Message: " + msg);
+  })
+}
 
 /*
 	Output:
