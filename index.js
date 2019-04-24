@@ -5,17 +5,29 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+var pack = null
+try {
+  pack = require('../../package.json')
+} catch (e) {
+
+}
+
+
 // const app = electron.app || electron.remote.app;
 // const userData = app.getPath('userData');
 
 const platform = os.platform();
 
-let appName = '';
-if (JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName) {
+var appName = ''
+if (pack !== null) {
+  appName = pack.name
+}
+
+/* if (JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName) {
   appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName;
 }else{
   appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).name;
-}
+} */
 
 let userData = '';
 
@@ -30,11 +42,25 @@ if (platform === 'win32') {
 
 /**
  * Create a table | a json file
- * @param  {[string]} tableName [Table name]
+ * The second argument is optional, if ommitted, the file
+ * will be created at the default location.
+ * @param  {[string]} arguments[0] [Table name]
+ * @param {[string]} arguments[1] [Location of the database file] (Optional)
+ * @param {[function]} arguments[2] [Callbak ]
  */
-function createTable(tableName, callback) {
-  // Define the filename
-  let fname = path.join(userData, tableName + '.json');
+// function createTable(tableName, callback) {
+function createTable() {
+  tableName = arguments[0];
+  var fname = '';
+  var callback;
+  if (arguments.length === 2) {
+
+    callback = arguments[1];
+    fname = path.join(userData, tableName + '.json');
+  } else if (arguments.length === 3) {
+    fname = arguments[1] + arguments[0] + '.json';
+    callback = arguments[2];
+  }
 
   // Check if the file with the tablename.json exists
   let exists = fs.existsSync(fname);
@@ -43,72 +69,72 @@ function createTable(tableName, callback) {
     // The file exists, do not recreate the table/json file
     callback(false, tableName + '.json already exists!');
     return;
-  }else{
+  } else {
     // Create an empty object and pass an empty array as value
     let obj = new Object();
     obj[tableName] = [];
 
     // Write the object to json file
     try {
-      jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
-        console.log(err);
-      });
+      fs.writeFile(fname, JSON.stringify(obj, null, 2), (err) => {
+
+      })
       callback(true, "Success!")
       return;
     } catch (e) {
       callback(false, e.toString());
+      return;
     }
 
   }
 }
 
-/**
- * Create a table | a json file
- * @param  {[string]} tableName [Table name]
- * @param  {[string]} location [Path to the prefered location of the database file]
- * (location could be '/Users/<username>/Desktop' on my Mac)
- */
-function createTableAt(tableName, location, callback) {
-  // Define the filename
-  let fname = location + tableName + '.json';
-
-  // Check if the file with the tablename.json exists
-  let exists = fs.existsSync(fname);
-
-  if (exists) {
-    // The file exists, do not recreate the table/json file
-    callback(false, tableName + '.json already exists!');
-    return;
-  }else{
-    // Create an empty object and pass an empty array as value
-    let obj = new Object();
-    obj[tableName] = [];
-
-    // Write the object to json file
-    try {
-      jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
-        console.log(err);
-      });
-      callback(true, "Success!")
-      return;
-    } catch (e) {
-      callback(false, e.toString());
-    }
-
+function valid() {
+  var fName = ''
+  if (arguments.length == 2) {
+    // Given the database name and location
+    const dbName = arguments[0]
+    const dbLocation = arguments[1]
+    var fName = dbLocation + dbName + '.json'
+  } else if (arguments.length == 1) {
+    const dbName = arguments[0]
+    fname = path.join(userData, dbName + '.json')
   }
-}
 
+  const content = fs.readFileSync(fName, 'utf-8')
+  try {
+    JSON.parse(content)
+  } catch (e) {
+    return false
+  }
+  return true
+}
 
 /**
  * Insert object to table. The object will be appended with the property, id
  * which uses timestamp as value.
- * @param  {string} tableName  [Table name]
- * @param  {string} tableField [Field name]
- * @param  {value} fieldValue [Value (string, number, list, etc.)]
- * @param {Function} callback [Callback function]
+ * There are 3 required arguments.
+ * @param  {string} arguments[0]  [Table name]
+ * @param  {string} arguments[1] [Location of the database file] (Optional)
+ * @param  {string} arguments[2] [Row object]
+ * @param  {Function} arguments[3] [Callback function]
  */
-function insertTableContent(tableName, tableRow, callback) {
-  let fname = path.join(userData, tableName + '.json');
+// function insertTableContent(tableName, tableRow, callback) {
+function insertTableContent() {
+  let tableName = arguments[0];
+  var fname = '';
+  var callback;
+  var tableRow;
+  if (arguments.length === 3) {
+    callback = arguments[2];
+    fname = path.join(userData, arguments[0] + '.json');
+    tableRow = arguments[1];
+  } else if (arguments.length === 4) {
+    fname = arguments[1] + arguments[0] + '.json';
+    callback = arguments[3];
+    tableRow = arguments[2];
+  }
+
   let exists = fs.existsSync(fname);
 
   if (exists) {
@@ -122,8 +148,8 @@ function insertTableContent(tableName, tableRow, callback) {
     table[tableName].push(tableRow);
 
     try {
-      jsonfile.writeFile(fname, table, {spaces: 2}, function (err){
-        console.log("Error: " + err);
+      jsonfile.writeFileSync(fname, table, { spaces: 2 }, function (err) {
+        // console.log("Error: " + err);
       });
       callback(true, "Object written successfully!");
       return;
@@ -133,15 +159,29 @@ function insertTableContent(tableName, tableRow, callback) {
     }
   }
   callback(false, "Table/json file doesn't exist!");
+  return;
 }
 
 /**
  * Get all contents of the table/json file object
- * @param  {[string]}   tableName [Table name]
- * @param  {Function} callback  [callback]
+ * @param  {string} arguments[0] [Table name]
+ * @param  {string} arguments[1] [Location of the database file] (Optional)
+ * @param  {Function} arguments[2]  [callback function]
  */
-function getAll(tableName, callback) {
-  let fname = path.join(userData, tableName + '.json');
+// function getAll(tableName, callback) {
+function getAll() {
+  var fname = '';
+  var callback;
+  var tableName = arguments[0];
+
+  if (arguments.length === 2) {
+    fname = path.join(userData, tableName + '.json');
+    callback = arguments[1];
+  } else if (arguments.length === 3) {
+    fname = arguments[1] + arguments[0] + '.json';
+    callback = arguments[2];
+  }
+
   let exists = fs.existsSync(fname);
 
   if (exists) {
@@ -154,24 +194,41 @@ function getAll(tableName, callback) {
       return;
     }
   } else {
-    callback(false, []);
+    callback(false, 'Table file does not exist!');
     return;
   }
 }
 
 /**
  * Get row or rows that matched the given condition(s) in WHERE argument
- * @param {string} tableName Table name
- * @param {object} where Collection of conditions to be met
- * @param {callback} callback Function callback
+ * @param {string} arguments[0] Table name
+ * @param {string} arguments[1] [Location of the database file] (Optional)
+ * @param {object} arguments[2] Collection of conditions to be met
+ * @param {callback} arguments[3] Function callback
  */
-function getRows(tableName, where, callback) {
-  let fname = path.join(userData, tableName + '.json');
+// function getRows(tableName, where, callback) {
+function getRows() {
+
+  let tableName = arguments[0];
+  var fname = '';
+  var callback;
+  var where;
+
+  if (arguments.length === 3) {
+    fname = path.join(userData, tableName + '.json');
+    where = arguments[1];
+    callback = arguments[2];
+  } else if (arguments.length === 4) {
+    fname = arguments[1] + arguments[0] + '.json';
+    where = arguments[2];
+    callback = arguments[3];
+  }
+
   let exists = fs.existsSync(fname);
   let whereKeys;
 
   // Check if where is an object
-  if (Object.prototype.toString.call(where) === "[object Object]" ) {
+  if (Object.prototype.toString.call(where) === "[object Object]") {
     // Check for number of keys
     whereKeys = Object.keys(where);
     if (whereKeys === 0) {
@@ -209,21 +266,45 @@ function getRows(tableName, where, callback) {
       }
 
       callback(true, objs);
-    }catch (e) {
+      return;
+    } catch (e) {
       callback(false, e.toString());
+      return;
     }
+  } else {
+    callback(false, 'Table file does not exist!');
+    return;
   }
 }
 
 /**
  * Update a row or record which satisfies the where clause
- * @param  {[string]}   tableName [Table name]
- * @param  {[object]}   where     [Objet for WHERE clause]
- * @param  {[object]}   set       [Object for SET clause]
- * @param  {Function} callback  [Callback function]
+ * @param  {[string]} arguments[0] [Table name]
+ * @param {string} arguments[1] [Location of the database file] (Optional)
+ * @param  {[object]} arguments[2]     [Objet for WHERE clause]
+ * @param  {[object]} arguments[3]       [Object for SET clause]
+ * @param  {Function} arguments[4]  [Callback function]
  */
-function updateRow(tableName, where, set, callback) {
-  let fname = path.join(userData, tableName + '.json');
+// function updateRow(tableName, where, set, callback) {
+function updateRow() {
+  let tableName = arguments[0];
+  var fname = '';
+  var where;
+  var set;
+  var callback;
+
+  if (arguments.length === 4) {
+    fname = path.join(userData, tableName + '.json');
+    where = arguments[1];
+    set = arguments[2];
+    callback = arguments[3];
+  } else if (arguments.length === 5) {
+    fname = arguments[1] + arguments[0] + '.json';
+    where = arguments[2];
+    set = arguments[3];
+    callback = arguments[4];
+  }
+
   let exists = fs.existsSync(fname);
 
   let whereKeys = Object.keys(where);
@@ -237,7 +318,7 @@ function updateRow(tableName, where, set, callback) {
     let matchedIndex = 0;
 
     for (var i = 0; i < rows.length; i++) {
-      
+
       for (var j = 0; j < whereKeys.length; j++) {
         // Test if there is a matched key with where clause and single row of table
         if (rows[i].hasOwnProperty(whereKeys[j])) {
@@ -264,7 +345,7 @@ function updateRow(tableName, where, set, callback) {
 
         // Write the object to json file
         try {
-          jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
+          jsonfile.writeFileSync(fname, obj, { spaces: 2 }, function (err) {
             console.log(err);
           });
           callback(true, "Success!")
@@ -285,18 +366,41 @@ function updateRow(tableName, where, set, callback) {
     }
 
 
+  } else {
+    callback(false, 'Table file does not exist!');
+    return;
   }
 }
 
 /**
- *
- * @param {*} tableName Name of the table to search for
- * @param {*} field Name of the column/key to match
- * @param {*} keyword The part of the value of the key that is being lookup
- * @param {*} callback Callback function
+ * Searching function
+ * @param {string} arguments[0] Name of the table to search for
+ * @param {string} arguments[1] [Location of the database file] (Optional)
+ * @param {string} arguments[2] Name of the column/key to match
+ * @param {object} arguments[3] The part of the value of the key that is being lookup
+ * @param {function} arguments[4] Callback function
  */
-function search(tableName, field, keyword, callback) {
-  let fname = path.join(userData, tableName + '.json');
+// function search(tableName, field, keyword, callback) {
+function search() {
+
+  let tableName = arguments[0];
+  var fname = '';
+  var field;
+  var keyword;
+  var callback;
+
+  if (arguments.length === 4) {
+    fname = path.join(userData, tableName + '.json');
+    field = arguments[1];
+    keyword = arguments[2];
+    callback = arguments[3];
+  } else if (arguments.length === 5) {
+    fname = arguments[1] + arguments[0] + '.json';
+    field = arguments[2];
+    keyword = arguments[3];
+    callback = arguments[4];
+  }
+
   let exists = fs.existsSync(fname);
 
   if (exists) {
@@ -311,16 +415,17 @@ function search(tableName, field, keyword, callback) {
       for (var i = 0; i < rows.length; i++) {
         // Check if key exists
         if (rows[i].hasOwnProperty(field)) {
-          // Get the index of the search term
-          let value = rows[i][field].toLowerCase();
-          let n = value.search(keyword.toLowerCase());
+          // Make sure that an object is converted to string before
+          // applying toLowerCase()
+          let value = rows[i][field].toString().toLowerCase();
+          let n = value.search(keyword.toString().toLowerCase());
 
           if (n !== -1) {
             // The substring is found, add object to the list.
             foundRows.push(rows[i]);
           }
 
-        }else{
+        } else {
           callback(false, 2);
           return;
         }
@@ -330,17 +435,40 @@ function search(tableName, field, keyword, callback) {
       return;
 
     } else {
-      callback(false, 1);
+      callback(false, []);
       return;
     }
   } else {
-    callback(false, 0);
+    callback(false, 'Table file does not exist!');
     return;
   }
 }
 
-function deleteRow(tableName, where, callback) {
-  let fname = path.join(userData, tableName + '.json');
+/**
+ * Delete a row specified.
+ * @param {*} tableName 
+ * @param {string} arguments[1] [Location of the database file] (Optional)
+ * @param {*} where 
+ * @param {*} callback 
+ */
+// function deleteRow(tableName, where, callback) {
+function deleteRow() {
+  let tableName = arguments[0];
+
+  var fname = '';
+  var where;
+  var callback;
+
+  if (arguments.length === 3) {
+    fname = path.join(userData, tableName + '.json');
+    where = arguments[1];
+    callback = arguments[2];
+  } else if (arguments.length === 4) {
+    fname = arguments[1] + arguments[0] + '.json';
+    where = arguments[2];
+    callback = arguments[3];
+  }
+
   let exists = fs.existsSync(fname);
 
   let whereKeys = Object.keys(where);
@@ -350,36 +478,38 @@ function deleteRow(tableName, where, callback) {
     let rows = table[tableName];
 
     if (rows.length > 0) {
+      let matched = 0;
+      let matchedIndices = [];
+
       for (let i = 0; i < rows.length; i++) {
         // Iterate throught the rows
-        let matched = 0;
-        let matchedIndices = [];
-
         for (var j = 0; j < whereKeys.length; j++) {
           // Test if there is a matched key with where clause and single row of table
           if (rows[i].hasOwnProperty(whereKeys[j])) {
-            if (rows[i][whereKeys[j]] === where[whereKeys]) {
+            if (rows[i][whereKeys[j]] === where[whereKeys[j]]) {
               matched++;
               matchedIndices.push(i);
             }
           }
         }
+      }
 
-        for (let i = 0; i < matchedIndices.length; i++) {
-          rows.splice(matchedIndices[i], 1);
-        }
+      if (matchedIndices.length === 0) {
+        callback(false, 'Row does not exist!');
+        return;
+      }
 
+      for (let k = 0; k < matchedIndices.length; k++) {
+        rows.splice(matchedIndices[k], 1);
       }
 
       // Create a new object and pass the rows
       let obj = new Object();
       obj[tableName] = rows;
 
-      console.log(rows);
-
       // Write the object to json file
       try {
-        jsonfile.writeFile(fname, obj, {spaces: 2}, function (err){
+        jsonfile.writeFileSync(fname, obj, { spaces: 2 }, function (err) {
 
         });
         callback(true, "Row(s) deleted successfully!")
@@ -393,6 +523,9 @@ function deleteRow(tableName, where, callback) {
       callback(false, 'Table is empty!');
       return;
     }
+  } else {
+    callback(false, 'Table file does not exist!');
+    return;
   }
 
 }
@@ -400,11 +533,11 @@ function deleteRow(tableName, where, callback) {
 // Export the public available functions
 module.exports = {
   createTable,
-  createTableAt,
   insertTableContent,
   getAll,
   getRows,
   updateRow,
   search,
-  deleteRow
+  deleteRow,
+  valid
 };

@@ -7,7 +7,9 @@
 
 **electron-db** is a module to have a database-like functions to simulate table manipulation on data. The data is saved as a json flat file.
 
-The json file is saved on the application folder.
+The json file is saved on the application folder by default. From version 0.10.0, the user has the option to save the database table anywhere they chose.
+
+The only difference with the default location is that the user have to pass the string location as the second argument to any function to be used.
 
 The table format contained in the table_name.json should be in the form of
 ```
@@ -41,8 +43,6 @@ In Windows, the application folder should be in `C:\Users\[username]\AppData\Roa
 const db = require('electron-db');
 const { app, BrowserWindow } = require("electron");
 
-const app = electron.app || electron.remote.app;
-
 db.createTable('customers', (succ, msg) => {
   // succ - boolean, tells if the call is successful
   console.log("Success: " + succ);
@@ -62,8 +62,9 @@ db.createTable('customers', (succ, msg) => {
 ```
 
 ### **Creating Table specifying the Location**
+The custom location, if desired, shall be passed as the second aregument.
 ```javascript
-db.createTable('customers', 'C:\databases', (succ, msg) => {
+db.createTable('customers', 'C:\\databases\\', (succ, msg) => {
   // succ - boolean, tells if the call is successful
   console.log("Success: " + succ);
   console.log("Message: " + msg);
@@ -73,22 +74,22 @@ db.createTable('customers', 'C:\databases', (succ, msg) => {
 ### **Inserting Object/Data to Table**
 Insert an object into the list of row/data of the table.
 
+To insert to a custom location, pass the custom location as the second argument
+as shown in the sample above. But do not forget to check if the database is valid.
+
 ```javascript
-const db = require('electron-db');
-const electron = require('electron');
-
-const app = electron.app || electron.remote.app;
-
 let obj = new Object();
 
 obj.name = "Alexius Academia";
 obj.address = "Paco, Botolan, Zambales";
 
-db.insertTableContent('customers', obj, (succ, msg) => {
-  // succ - boolean, tells if the call is successful
-  console.log("Success: " + succ);
-  console.log("Message: " + msg);
-})
+if (db.valid('customers')) {
+  db.insertTableContent('customers', obj, (succ, msg) => {
+    // succ - boolean, tells if the call is successful
+    console.log("Success: " + succ);
+    console.log("Message: " + msg);
+  })
+}
 
 /*
 	Output:
@@ -108,6 +109,10 @@ db.insertTableContent('customers', obj, (succ, msg) => {
 */
 ```
 
+### For the database table at custom location
+For the implementation of this new feature, always put the location string as second argument for all the functions. (The directory string must ended with appropriate slashes, forward slash for unix and back slash with escape string for Windows) (e.g. Windows: ```'C:\\databases\\'```, Unix: ```'/Users/<username>/Desktop/'```)
+
+<!--
 ### **Inserting Multiple Objects/Data to Table**
 Insert multiple objects into the list of row/data of the table.
 
@@ -143,7 +148,7 @@ db.insertTableContents('records', m, (isSuccess, message) => {
       Object written successfully!
 */
 ```
-
+-->
 ### **Get all rows**
 Get all the rows for a given table by using the callback function.
 ```javascript
