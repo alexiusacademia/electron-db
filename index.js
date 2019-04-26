@@ -58,7 +58,7 @@ function createTable() {
     callback = arguments[1];
     fname = path.join(userData, tableName + '.json');
   } else if (arguments.length === 3) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     callback = arguments[2];
   }
 
@@ -95,7 +95,7 @@ function valid() {
     // Given the database name and location
     const dbName = arguments[0]
     const dbLocation = arguments[1]
-    var fName = dbLocation + dbName + '.json'
+    var fName = path.join(dbLocation, dbName + '.json')
   } else if (arguments.length == 1) {
     const dbName = arguments[0]
     fname = path.join(userData, dbName + '.json')
@@ -130,7 +130,7 @@ function insertTableContent() {
     fname = path.join(userData, arguments[0] + '.json');
     tableRow = arguments[1];
   } else if (arguments.length === 4) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     callback = arguments[3];
     tableRow = arguments[2];
   }
@@ -178,7 +178,7 @@ function getAll() {
     fname = path.join(userData, tableName + '.json');
     callback = arguments[1];
   } else if (arguments.length === 3) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     callback = arguments[2];
   }
 
@@ -219,7 +219,7 @@ function getRows() {
     where = arguments[1];
     callback = arguments[2];
   } else if (arguments.length === 4) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     where = arguments[2];
     callback = arguments[3];
   }
@@ -299,7 +299,7 @@ function updateRow() {
     set = arguments[2];
     callback = arguments[3];
   } else if (arguments.length === 5) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     where = arguments[2];
     set = arguments[3];
     callback = arguments[4];
@@ -395,7 +395,7 @@ function search() {
     keyword = arguments[2];
     callback = arguments[3];
   } else if (arguments.length === 5) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     field = arguments[2];
     keyword = arguments[3];
     callback = arguments[4];
@@ -464,7 +464,7 @@ function deleteRow() {
     where = arguments[1];
     callback = arguments[2];
   } else if (arguments.length === 4) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     where = arguments[2];
     callback = arguments[3];
   }
