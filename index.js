@@ -4,14 +4,24 @@ const jsonfile = require('jsonfile');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const pack = require('../../package.json')
+
+var pack = null
+try {
+  pack = require('../../package.json')
+} catch (e) {
+
+}
+
 
 // const app = electron.app || electron.remote.app;
 // const userData = app.getPath('userData');
 
 const platform = os.platform();
 
-let appName = pack.name
+var appName = ''
+if (pack !== null) {
+  appName = pack.name
+}
 
 /* if (JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName) {
   appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName;
