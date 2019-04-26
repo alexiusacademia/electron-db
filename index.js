@@ -76,7 +76,7 @@ function createTable() {
 
     // Write the object to json file
     try {
-      fs.writeFile(fname, JSON.stringify(obj, null, 2), (err) => {
+      fs.writeFileSync(fname, JSON.stringify(obj, null, 2), (err) => {
 
       })
       callback(true, "Success!")
