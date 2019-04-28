@@ -9,9 +9,7 @@
   },
   "author": "Alexius Academia <alexius.academia@gmail.com> (https://alexiusacademia.com)",
   "license": "MIT",
-  "dependencies": {
-    "jsonfile": "^4.0.0"
-  },
+  "dependencies": {},
   "repository": {
     "type": "git",
     "url": "https://github.com/alexiusacademia/electron-db"

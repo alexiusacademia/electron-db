@@ -1,5 +1,3 @@
-// Load required modules
-const jsonfile = require('jsonfile');
 // const electron = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -130,13 +128,13 @@ function insertTableContent() {
     fname = path.join(userData, arguments[0] + '.json');
     tableRow = arguments[1];
   } else if (arguments.length === 4) {
-    fname = path.join(arguments[1], arguments[0] + '.json');
+    fname =  path.join(arguments[1], arguments[0] + '.json');
     callback = arguments[3];
     tableRow = arguments[2];
   }
 
   let exists = fs.existsSync(fname);
-
+  
   if (exists) {
     // Table | json parsed
     let table = JSON.parse(fs.readFileSync(fname));
@@ -148,9 +146,10 @@ function insertTableContent() {
     table[tableName].push(tableRow);
 
     try {
-      jsonfile.writeFileSync(fname, table, { spaces: 2 }, function (err) {
-        // console.log("Error: " + err);
-      });
+      fs.writeFileSync(fname, JSON.stringify(table, null, 2), (err) => {
+
+      })
+      
       callback(true, "Object written successfully!");
       return;
     } catch (e) {
@@ -345,9 +344,10 @@ function updateRow() {
 
         // Write the object to json file
         try {
-          jsonfile.writeFileSync(fname, obj, { spaces: 2 }, function (err) {
-            console.log(err);
-          });
+          fs.writeFileSync(fname, JSON.stringify(obj, null, 2), (err) => {
+
+          })
+          
           callback(true, "Success!")
           return;
         } catch (e) {
@@ -509,9 +509,9 @@ function deleteRow() {
 
       // Write the object to json file
       try {
-        jsonfile.writeFileSync(fname, obj, { spaces: 2 }, function (err) {
+        fs.writeFileSync(fname, JSON.stringify(obj, null, 2), (err) => {
 
-        });
+        })
         callback(true, "Row(s) deleted successfully!")
         return;
       } catch (e) {
