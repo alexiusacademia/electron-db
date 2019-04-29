@@ -1,5 +1,3 @@
-// Load required modules
-const jsonfile = require('jsonfile');
 // const electron = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -12,22 +10,12 @@ try {
 
 }
 
-
-// const app = electron.app || electron.remote.app;
-// const userData = app.getPath('userData');
-
 const platform = os.platform();
 
 var appName = ''
 if (pack !== null) {
   appName = pack.name
 }
-
-/* if (JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName) {
-  appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName;
-}else{
-  appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).name;
-} */
 
 let userData = '';
 
@@ -38,7 +26,6 @@ if (platform === 'win32') {
 } else {
   userData = path.join('var', 'local', appName);
 }
-
 
 /**
  * Create a table | a json file
@@ -58,7 +45,7 @@ function createTable() {
     callback = arguments[1];
     fname = path.join(userData, tableName + '.json');
   } else if (arguments.length === 3) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     callback = arguments[2];
   }
 
@@ -76,7 +63,7 @@ function createTable() {
 
     // Write the object to json file
     try {
-      fs.writeFile(fname, JSON.stringify(obj, null, 2), (err) => {
+      fs.writeFileSync(fname, JSON.stringify(obj, null, 2), (err) => {
 
       })
       callback(true, "Success!")
@@ -95,7 +82,7 @@ function valid() {
     // Given the database name and location
     const dbName = arguments[0]
     const dbLocation = arguments[1]
-    var fName = dbLocation + dbName + '.json'
+    var fName = path.join(dbLocation, dbName + '.json')
   } else if (arguments.length == 1) {
     const dbName = arguments[0]
     fname = path.join(userData, dbName + '.json')
@@ -130,13 +117,13 @@ function insertTableContent() {
     fname = path.join(userData, arguments[0] + '.json');
     tableRow = arguments[1];
   } else if (arguments.length === 4) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname =  path.join(arguments[1], arguments[0] + '.json');
     callback = arguments[3];
     tableRow = arguments[2];
   }
 
   let exists = fs.existsSync(fname);
-
+  
   if (exists) {
     // Table | json parsed
     let table = JSON.parse(fs.readFileSync(fname));
@@ -148,9 +135,10 @@ function insertTableContent() {
     table[tableName].push(tableRow);
 
     try {
-      jsonfile.writeFileSync(fname, table, { spaces: 2 }, function (err) {
-        // console.log("Error: " + err);
-      });
+      fs.writeFileSync(fname, JSON.stringify(table, null, 2), (err) => {
+
+      })
+      
       callback(true, "Object written successfully!");
       return;
     } catch (e) {
@@ -178,7 +166,7 @@ function getAll() {
     fname = path.join(userData, tableName + '.json');
     callback = arguments[1];
   } else if (arguments.length === 3) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     callback = arguments[2];
   }
 
@@ -219,7 +207,7 @@ function getRows() {
     where = arguments[1];
     callback = arguments[2];
   } else if (arguments.length === 4) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     where = arguments[2];
     callback = arguments[3];
   }
@@ -299,7 +287,7 @@ function updateRow() {
     set = arguments[2];
     callback = arguments[3];
   } else if (arguments.length === 5) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     where = arguments[2];
     set = arguments[3];
     callback = arguments[4];
@@ -345,9 +333,10 @@ function updateRow() {
 
         // Write the object to json file
         try {
-          jsonfile.writeFileSync(fname, obj, { spaces: 2 }, function (err) {
-            console.log(err);
-          });
+          fs.writeFileSync(fname, JSON.stringify(obj, null, 2), (err) => {
+
+          })
+          
           callback(true, "Success!")
           return;
         } catch (e) {
@@ -395,7 +384,7 @@ function search() {
     keyword = arguments[2];
     callback = arguments[3];
   } else if (arguments.length === 5) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     field = arguments[2];
     keyword = arguments[3];
     callback = arguments[4];
@@ -464,7 +453,7 @@ function deleteRow() {
     where = arguments[1];
     callback = arguments[2];
   } else if (arguments.length === 4) {
-    fname = arguments[1] + arguments[0] + '.json';
+    fname = path.join(arguments[1], arguments[0] + '.json');
     where = arguments[2];
     callback = arguments[3];
   }
@@ -509,9 +498,9 @@ function deleteRow() {
 
       // Write the object to json file
       try {
-        jsonfile.writeFileSync(fname, obj, { spaces: 2 }, function (err) {
+        fs.writeFileSync(fname, JSON.stringify(obj, null, 2), (err) => {
 
-        });
+        })
         callback(true, "Row(s) deleted successfully!")
         return;
       } catch (e) {
