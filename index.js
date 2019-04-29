@@ -10,22 +10,12 @@ try {
 
 }
 
-
-// const app = electron.app || electron.remote.app;
-// const userData = app.getPath('userData');
-
 const platform = os.platform();
 
 var appName = ''
 if (pack !== null) {
   appName = pack.name
 }
-
-/* if (JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName) {
-  appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).productName;
-}else{
-  appName = JSON.parse(fs.readFileSync('package.json', 'utf-8')).name;
-} */
 
 let userData = '';
 
@@ -36,7 +26,6 @@ if (platform === 'win32') {
 } else {
   userData = path.join('var', 'local', appName);
 }
-
 
 /**
  * Create a table | a json file
