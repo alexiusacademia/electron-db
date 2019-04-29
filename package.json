@@ -1,34 +1,26 @@
 {
-  "name": "electron-db",
-<<<<<<< HEAD
-  "version": "0.12.0",
-=======
-<<<<<<< HEAD
-  "version": "0.11.3",
-=======
-  "version": "0.11.5",
->>>>>>> 8879699cb2e23d1bc3d4c4d402ab5f5b92123066
->>>>>>> 5eda374c992c234aff9c520d6db9543fa0f85245
-  "description": "Electron module that simulates database table operations which really just uses json file to store tables in the Application Folder.",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
-    "test": "node test.js"
-  },
-  "author": "Alexius Academia <alexius.academia@gmail.com> (https://alexiusacademia.com)",
-  "license": "MIT",
-  "dependencies": {},
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/alexiusacademia/electron-db"
-  },
-  "devDependencies": {},
-  "keywords": [
-    "electron",
-    "database",
-    "json database",
-    "json table",
-    "electron database",
-    "electron simple database"
-  ]
+    "name": "electron-db",
+    "version": "0.11.5",
+    "description": "Electron module that simulates database table operations which really just uses json file to store tables in the Application Folder.",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "test": "node test.js"
+    },
+    "author": "Alexius Academia <alexius.academia@gmail.com> (https://alexiusacademia.com)",
+    "license": "MIT",
+    "dependencies": {},
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/alexiusacademia/electron-db"
+    },
+    "devDependencies": {},
+    "keywords": [
+        "electron",
+        "database",
+        "json database",
+        "json table",
+        "electron database",
+        "electron simple database"
+    ]
 }
