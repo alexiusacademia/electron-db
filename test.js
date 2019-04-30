@@ -48,6 +48,15 @@ db.getAll(dbName, dbLocation, (succ, data) => {
 });
 
 // Delete all the data
-db.clearTable(dbName, dbLocation, () => {
+db.clearTable(dbName, dbLocation, (succ, msg) => {
+    if (succ) {
+        console.log(msg)
 
+        // Show the content now
+        db.getAll(dbName, dbLocation, (succ, data) => {
+            if (succ) {
+                console.log(data);
+            }
+        });
+    }
 })
