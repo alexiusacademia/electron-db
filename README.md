@@ -255,4 +255,22 @@ db.deleteRow('customers', {'id': 1508419374272}, (succ, msg) => {
 
 ```
 
+### **Clear all Records**
+Clear all the records in the sprcified table.
+```
+// Delete all the data
+db.clearTable(dbName, dbLocation, (succ, msg) => {
+    if (succ) {
+        console.log(msg)
+
+        // Show the content now
+        db.getAll(dbName, dbLocation, (succ, data) => {
+            if (succ) {
+                console.log(data);
+            }
+        });
+    }
+})
+```
+
 For contributions, please see the `CONTRIBUTE.md file. Thank you.
