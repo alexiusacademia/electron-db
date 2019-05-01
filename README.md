@@ -255,9 +255,22 @@ db.deleteRow('customers', {'id': 1508419374272}, (succ, msg) => {
 
 ```
 
+### **Get data for specific field**
+Get all the field given in a specific key.
+This will return all values on each row that has the key given in the parameter.
+```javascript
+const key = 'name'
+
+db.getField(dbName, dbLocation, key, (succ, data) => {
+    if (succ) {
+      console.log(data)
+    }
+})
+```
+
 ### **Clear all Records**
 Clear all the records in the sprcified table.
-```
+```javascript
 // Delete all the data
 db.clearTable(dbName, dbLocation, (succ, msg) => {
     if (succ) {
