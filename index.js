@@ -191,6 +191,49 @@ function getAll() {
 }
 
 /**
+ * Find rows of a given field/key.
+ * @param  {string} arguments[0] Table name
+ * @param  {string} arguments[1] Location of the database file (Optional)
+ * @param  {string} arguments[2] They fey/field to retrieve.
+ */
+function getField() {
+    let fname = ''
+    let tableName = arguments[0]
+    let callback
+    let key
+
+    if (arguments.length === 3) {
+        fname = path.join(userData, tableName + '.json');
+        callback = arguments[2];
+        key = arguments[1]
+    } else if (arguments.length === 4) {
+        fname = path.join(arguments[1], arguments[0] + '.json');
+        callback = arguments[3];
+        key = arguments[2]
+    }
+
+    let exists = fs.existsSync(fname)
+
+    if (exists) {
+        let table = JSON.parse(fs.readFileSync(fname));
+        const rows = table[tableName]
+        let data = []
+
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].hasOwnProperty(key)) {
+                data.push(rows[i][key])
+            }
+        }
+
+        callback(true, data)
+
+    } else {
+        callback(false, 'The table you are trying to access does not exist.')
+        return
+    }
+}
+
+/**
  * Clears an existing table leaving an empty list in the json file.
  * @param  {string} arguments[0] [Table name]
  * @param  {string} arguments[1] [Location of the database file] (Optional)
@@ -574,5 +617,6 @@ module.exports = {
     search,
     deleteRow,
     valid,
-    clearTable
+    clearTable,
+    getField
 };
