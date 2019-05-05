@@ -286,4 +286,17 @@ db.clearTable(dbName, dbLocation, (succ, msg) => {
 })
 ```
 
+### **Count Records**
+Count the number of rows for a given table.
+```
+db.count(dbName, dbLocation, (succ, data) => {
+    if (succ) {
+        console.log(data)
+    } else {
+        console.log('An error has occured.')
+        console.log(data)
+    }
+})
+```
+
 For contributions, please see the `CONTRIBUTE.md file. Thank you.
