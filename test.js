@@ -50,10 +50,7 @@ db.getAll(dbName, dbLocation, (succ, data) => {
 console.log('getField:')
 const key = 'name'
 
-db.getField(dbName, dbLocation, key, (succ, data) => {
-    console.log(succ)
-    console.log(data)
-})
+
 
 // Delete all the data
 /* console.log('clearTable:')
