@@ -280,7 +280,32 @@ function clearTable() {
  */
 function count() {
     let tableName = arguments[0]
-
+    let callback
+    if (arguments.length === 2) {
+        callback = arguments[1]
+        getRows(tableName, (succ, data) => {
+            if (succ) {
+                callback(true, data.length)
+                return
+            } else {
+                callback(false, data)
+            }
+        })
+    } else if (arguments.length === 3) {
+        callback = arguments[2]
+        getRows(tableName, arguments[1], (succ, data) => {
+            if (succ) {
+                callback(true, data.length)
+                return
+            } else {
+                callback(false, data)
+                return
+            }
+        })
+    } else {
+        callback(false,'Wrong number of arguments. Must be either 2 or 3 arguments including callback function.')
+        return
+    }
 }
 
 /**
