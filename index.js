@@ -276,13 +276,27 @@ function clearTable() {
 }
 
 /**
- * Get row or rows that matched the given condition(s) in WHERE argument
- * @param {string} arguments[0] Table name
- * @param {string} arguments[1] [Location of the database file] (Optional)
- * @param {object} arguments[2] Collection of conditions to be met
- * @param {callback} arguments[3] Function callback
+ * Count the number of rows for a given table.
  */
-// function getRows(tableName, where, callback) {
+function count() {
+    let tableName = arguments[0]
+
+}
+
+/**
+ * Get row or rows that matched the given condition(s) in WHERE argument
+ * @param {string} FirstArgument Table name
+ * @param {string} SecondArgument Location of the database file (Optional)
+ * @param {object} ThirdArgument Collection of conditions to be met
+ ```
+ {
+      key1: value1,
+      key2: value2,
+      ...
+ }
+ ```
+ * @param {callback} FourthArgument Function callback
+ */
 function getRows() {
 
     let tableName = arguments[0];
