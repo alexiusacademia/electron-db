@@ -47,10 +47,14 @@ db.getAll(dbName, dbLocation, (succ, data) => {
     }
 });
 
-console.log('getField:')
-const key = 'name'
-
-
+db.count(dbName, dbLocation, (succ, data) => {
+    if (succ) {
+        console.log(data)
+    } else {
+        console.log('An error has occured.')
+        console.log(data)
+    }
+})
 
 // Delete all the data
 /* console.log('clearTable:')
