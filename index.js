@@ -283,17 +283,18 @@ function count() {
     let callback
     if (arguments.length === 2) {
         callback = arguments[1]
-        getRows(tableName, (succ, data) => {
+        getAll(tableName, (succ, data) => {
             if (succ) {
                 callback(true, data.length)
                 return
             } else {
                 callback(false, data)
+                return
             }
         })
     } else if (arguments.length === 3) {
         callback = arguments[2]
-        getRows(tableName, arguments[1], (succ, data) => {
+        getAll(tableName, arguments[1], (succ, data) => {
             if (succ) {
                 callback(true, data.length)
                 return
@@ -657,5 +658,6 @@ module.exports = {
     deleteRow,
     valid,
     clearTable,
-    getField
+    getField,
+    count
 };
