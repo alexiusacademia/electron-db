@@ -277,6 +277,9 @@ function clearTable() {
 
 /**
  * Count the number of rows for a given table.
+ * @param {string} FirstArgument Table name
+ * @param {string} SecondArgument Location of the database file (Optional)
+ * @param {callback} ThirdArgument Function callback
  */
 function count() {
     let tableName = arguments[0]
