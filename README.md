@@ -28,9 +28,8 @@ The table format contained in the table_name.json should be in the form of
 
 ### **Installation**
 
-
 ```javascript
-npm install electron-db
+npm install electron-db --save
 ```
 
 ### **Creating Table**
@@ -64,10 +63,18 @@ db.createTable('customers', (succ, msg) => {
 ### **Creating Table specifying the Location**
 The custom location, if desired, shall be passed as the second aregument.
 ```javascript
-db.createTable('customers', 'C:\\databases\\', (succ, msg) => {
+const path = require('path')
+
+// This will save the database in the same directory as the application.
+const location = path.join(__dirname, '')
+
+db.createTable('customers', location, (succ, msg) => {
   // succ - boolean, tells if the call is successful
-  console.log("Success: " + succ);
-  console.log("Message: " + msg);
+  if (succ) {
+    console.log(msg)
+  } else {
+    console.log('An error has occured. ' + msg)
+  }
 })
 ```
 
