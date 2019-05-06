@@ -117,7 +117,7 @@ if (db.valid('customers')) {
 ```
 
 ### For the database table at custom location
-For the implementation of this new feature, always put the location string as second argument for all the functions. (The directory string must ended with appropriate slashes, forward slash for unix and back slash with escape string for Windows) (e.g. Windows: ```'C:\\databases\\'```, Unix: ```'/Users/<username>/Desktop/'```)
+For the implementation of this new feature, always put the location string as second argument for all the functions. (The directory string must end with appropriate slashes, forward slash for unix and back slash with escape string for Windows) (e.g. Windows: ```'C:\\databases\\'```, Unix: ```'/Users/<username>/Desktop/'```). For good practice, use the ```path.join``` method to let the OS apply its directory separator automatically.
 
 <!--
 ### **Inserting Multiple Objects/Data to Table**
