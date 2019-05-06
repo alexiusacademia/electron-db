@@ -3,13 +3,13 @@
 [![Build Status](https://travis-ci.org/alexiusacademia/electron-db.svg?branch=master)](https://travis-ci.org/alexiusacademia/electron-db)
 [![NPM version](https://img.shields.io/npm/v/electron-db.svg)](https://npmjs.org/package/electron-db "View this project on NPM")
 [![NPM downloads](https://img.shields.io/npm/dm/electron-db.svg)](https://npmjs.org/package/electron-db "View this project on NPM")
-> Database-like solution in electron apps
+> Flat file database solution for electron and other Nodejs apps.
 
-**electron-db** is a module to have a database-like functions to simulate table manipulation on data. The data is saved as a json flat file.
+**electron-db** is an npm library that let you simplify database creation and operation on a json file.
 
-The json file is saved on the application folder by default. From version 0.10.0, the user has the option to save the database table anywhere they chose.
+The json file is saved on the application folder or you can specify the location for the database to be created. From version 0.10.0, the user has the option to save the database table anywhere they chose.
 
-The only difference with the default location is that the user have to pass the string location as the second argument to any function to be used.
+The only difference with the default location is that, the user have to pass the string location as the second argument to any function to be used (this is optional if you want to control the database location).
 
 The table format contained in the table_name.json should be in the form of
 ```
@@ -24,7 +24,7 @@ The table format contained in the table_name.json should be in the form of
 }
 ```
 
-**Important:** The script that uses this library should be run with electron command first in order to create the directory on the user data folder. The name that will be used for the app directory will be what was indicated in the `package.json` as <em>productName</em>. If this is not set, the <em>name</em> property will be used.
+**Important:** The script that uses this library should be run with electron command first in order to create the directory on the user data folder (when not using a custom directory for the database). The name that will be used for the app directory will be what was indicated in the `package.json` as <em>name</em>. If this is not set, the <em>name</em> property will be used.
 
 ### **Installation**
 
