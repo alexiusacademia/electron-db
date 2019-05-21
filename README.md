@@ -11,7 +11,7 @@ The json file is saved on the application folder or you can specify the location
 
 The only difference with the default location is that, the user have to pass the string location as the second argument to any function to be used (this is optional if you want to control the database location).
 
-The table format contained in the table_name.json should be in the form of
+The table format contained in the `table_name.json` should be in the form of
 ```
 {
   "table_name": [
@@ -33,7 +33,7 @@ npm install electron-db --save
 ```
 
 ### **Creating Table**
-Creates a json file [table-name].js inside the application `userData folder.
+Creates a json file `[table-name].js` inside the application `userData` folder.
 
 In Windows, the application folder should be in `C:\Users\[username]\AppData\Roaming\[application name]`
 
@@ -61,7 +61,7 @@ db.createTable('customers', (succ, msg) => {
 ```
 
 ### **Creating Table specifying the Location**
-The custom location, if desired, shall be passed as the second aregument.
+The custom location, if desired, shall be passed as the second argument.
 ```javascript
 const path = require('path')
 
@@ -276,7 +276,7 @@ db.getField(dbName, dbLocation, key, (succ, data) => {
 ```
 
 ### **Clear all Records**
-Clear all the records in the sprcified table.
+Clear all the records in the specified table.
 ```javascript
 // Delete all the data
 db.clearTable(dbName, dbLocation, (succ, msg) => {
@@ -306,4 +306,4 @@ db.count(dbName, dbLocation, (succ, data) => {
 })
 ```
 
-For contributions, please see the `CONTRIBUTE.md file. Thank you.
+For contributions, please see the `CONTRIBUTE.md` file. Thank you.
