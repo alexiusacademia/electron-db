@@ -61,7 +61,7 @@ db.createTable('customers', (succ, msg) => {
 ```
 
 ### **Creating Table specifying the Location**
-The custom location, if desired, shall be passed as the second aregument.
+The custom location, if desired, shall be passed as the second argument and the remaining arguments are the same (if any) on a specific function.
 ```javascript
 const path = require('path')
 
