@@ -219,13 +219,22 @@ function getField() {
         const rows = table[tableName]
         let data = []
 
+        let hasMatch = false
+
         for (let i = 0; i < rows.length; i++) {
             if (rows[i].hasOwnProperty(key)) {
                 data.push(rows[i][key])
+                hasMatch = true
             }
         }
 
+        if (hasMatch) {
+            callback(false, 'The key/field given does not exist.')
+            return
+        }
+
         callback(true, data)
+        return
 
     } else {
         callback(false, 'The table you are trying to access does not exist.')
