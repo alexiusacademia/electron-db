@@ -228,7 +228,7 @@ function getField() {
             }
         }
 
-        if (hasMatch) {
+        if (!hasMatch) {
             callback(false, 'The key/field given does not exist.')
             return
         }
