@@ -276,7 +276,7 @@ db.getField(dbName, dbLocation, key, (succ, data) => {
 ```
 
 ### **Clear all Records**
-Clear all the records in the sprcified table.
+Clear all the records in the specified table.
 ```javascript
 // Delete all the data
 db.clearTable(dbName, dbLocation, (succ, msg) => {
