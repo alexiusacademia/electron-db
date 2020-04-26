@@ -219,13 +219,22 @@ function getField() {
         const rows = table[tableName]
         let data = []
 
+        let hasMatch = false
+
         for (let i = 0; i < rows.length; i++) {
             if (rows[i].hasOwnProperty(key)) {
                 data.push(rows[i][key])
+                hasMatch = true
             }
         }
 
+        if (!hasMatch) {
+            callback(false, 'The key/field given does not exist.')
+            return
+        }
+
         callback(true, data)
+        return
 
     } else {
         callback(false, 'The table you are trying to access does not exist.')
@@ -650,6 +659,27 @@ function deleteRow() {
 
 }
 
+/**
+ * Check table existence
+ * @param {String} dbName - Table name
+ * @param {String} dbLocation - Table location path
+ * @return {Boolean} checking result
+ */
+function tableExists() {
+    let fName = '';
+    if (arguments.length == 2) {
+        // Given the database name and location
+        let dbName = arguments[0];
+        let dbLocation = arguments[1];
+        fName = path.join(dbLocation, dbName + '.json');
+    } else if (arguments.length == 1) {
+        let dbName = arguments[0];
+        fName = path.join(userData, dbName + '.json');
+    }
+
+    return fs.existsSync(fName);
+}
+
 // Export the public available functions
 module.exports = {
     createTable,
@@ -662,5 +692,6 @@ module.exports = {
     valid,
     clearTable,
     getField,
-    count
+    count,
+    tableExists
 };

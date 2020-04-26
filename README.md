@@ -27,7 +27,7 @@ The table format contained in the `table_name.json` should be in the form of
 **Important:** The script that uses this library should be run with electron command first in order to create the directory on the user data folder (when not using a custom directory for the database). The name that will be used for the app directory will be what was indicated in the `package.json` as <em>name</em>. If this is not set, the <em>name</em> property will be used.
 
 ### **Installation**
-
+The preferred way of installation is to install it locally on the application.
 ```javascript
 npm install electron-db --save
 ```
@@ -61,7 +61,7 @@ db.createTable('customers', (succ, msg) => {
 ```
 
 ### **Creating Table specifying the Location**
-The custom location, if desired, shall be passed as the second argument.
+The custom location, if desired, shall be passed as the second argument and the remaining arguments are the same (if any) on a specific function.
 ```javascript
 const path = require('path')
 
