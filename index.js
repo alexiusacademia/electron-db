@@ -85,10 +85,10 @@ function valid() {
         // Given the database name and location
         const dbName = arguments[0]
         const dbLocation = arguments[1]
-        var fName = path.join(dbLocation, dbName + '.json')
+        fName = path.join(dbLocation, dbName + '.json')
     } else if (arguments.length == 1) {
         const dbName = arguments[0]
-        fname = path.join(userData, dbName + '.json')
+        fName = path.join(userData, dbName + '.json')
     }
 
     const content = fs.readFileSync(fName, 'utf-8')
