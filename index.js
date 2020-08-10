@@ -442,29 +442,36 @@ function updateRow() {
         let table = JSON.parse(fs.readFileSync(fname));
         let rows = table[tableName];
 
-        let matched = 0; // Number of matched complete where clause
-        let matchedIndex = 0;
+        let nbRowsMatched = 0;
+        let nbKeysMatchedPerRow = 0;
+        let rowsMatchedIndexes = [];
 
         for (var i = 0; i < rows.length; i++) {
-
+            nbKeysMatchedPerRow = 0;
             for (var j = 0; j < whereKeys.length; j++) {
                 // Test if there is a matched key with where clause and single row of table
                 if (rows[i].hasOwnProperty(whereKeys[j])) {
                     if (rows[i][whereKeys[j]] === where[whereKeys[j]]) {
-                        matched++;
-                        matchedIndex = i;
+                        nbKeysMatchedPerRow++;
                     }
                 }
             }
+            if(nbKeysMatchedPerRow == whereKeys.length){
+                nbRowsMatched++;
+                rowsMatchedIndexes.push(i);
+            }
         }
 
-        if (matched === whereKeys.length) {
+        if (nbRowsMatched > 0) {
             // All field from where clause are present in this particular
             // row of the database table
             try {
-                for (var k = 0; k < setKeys.length; k++) {
-                    // rows[i][setKeys[k]] = set[setKeys[k]];
-                    rows[matchedIndex][setKeys[k]] = set[setKeys[k]];
+                for (var k = 0; k < rowsMatchedIndexes.length; k++) {
+                    var rowToUpdate = rows[rowsMatchedIndexes[k]];
+                    for (var l = 0; l < setKeys.length; l++) {
+                        var keyToUpdate = setKeys[l];
+                        rowToUpdate[keyToUpdate] = set[keyToUpdate];
+                    }
                 }
 
                 // Create a new object and pass the rows
@@ -477,7 +484,7 @@ function updateRow() {
 
                     })
 
-                    callback(true, "Success!")
+                    callback(true, "Success! "+nbRowsMatched+" row(s) updated.")
                     return;
                 } catch (e) {
                     callback(false, e.toString());
