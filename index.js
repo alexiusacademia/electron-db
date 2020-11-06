@@ -14,7 +14,7 @@ const platform = os.platform();
 
 var appName = ''
 if (pack !== null) {
-    appName = pack.name
+    appName = (pack.productName ? pack.productName : pack.name);
 }
 
 let userData = '';
