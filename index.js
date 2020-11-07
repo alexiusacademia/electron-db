@@ -14,7 +14,7 @@ const platform = os.platform();
 
 var appName = ''
 if (pack !== null) {
-    appName = pack.name
+    appName = (pack.productName ? pack.productName : pack.name);
 }
 
 let userData = '';
@@ -108,6 +108,7 @@ function valid() {
  * @param  {string} arguments[1] [Location of the database file] (Optional)
  * @param  {string} arguments[2] [Row object]
  * @param  {Function} arguments[3] [Callback function]
+ * @returns {(number|undefined)} [ID of the inserted row]
  */
 // function insertTableContent(tableName, tableRow, callback) {
 function insertTableContent() {
@@ -143,7 +144,7 @@ function insertTableContent() {
             })
 
             callback(true, "Object written successfully!");
-            return;
+            return id;
         } catch (e) {
             callback(false, "Error writing object.");
             return;
