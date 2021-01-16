@@ -629,7 +629,7 @@ function deleteRow() {
                 return;
             }
 
-            for (let k = matchedIndices.length; k >= 0; k--) {
+            for (let k = matchedIndices.length - 1; k >= 0; k--) {
                 rows.splice(matchedIndices[k], 1);
             }
 
