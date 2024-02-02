@@ -132,9 +132,12 @@ function insertTableContent() {
         // Table | json parsed
         let table = JSON.parse(fs.readFileSync(fname));
 
-        let date = new Date();
-        let id = date.getTime();
-        tableRow['id'] = id;
+        // Checks if id was provided
+        if(!tableRow['id']){
+            let date = new Date();
+            let id = date.getTime();
+            tableRow['id'] = id;
+        }
 
         table[tableName].push(tableRow);
 
