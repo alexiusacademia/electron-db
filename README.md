@@ -1,6 +1,6 @@
 # electron-db
 ---
-[![Build Status](https://travis-ci.org/alexiusacademia/electron-db.svg?branch=master)](https://travis-ci.org/alexiusacademia/electron-db)
+
 [![NPM version](https://img.shields.io/npm/v/electron-db.svg)](https://npmjs.org/package/electron-db "View this project on NPM")
 [![NPM downloads](https://img.shields.io/npm/dm/electron-db.svg)](https://npmjs.org/package/electron-db "View this project on NPM")
 > Flat file database solution for electron and other Nodejs apps.
@@ -29,7 +29,7 @@ The table format contained in the `table_name.json` should be in the form of
 ### **Installation**
 The preferred way of installation is to install it locally on the application.
 ```javascript
-npm install electron-db --save
+npm install @electron-db --save
 ```
 
 ### **Creating Table**

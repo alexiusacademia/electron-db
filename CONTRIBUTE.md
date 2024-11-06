@@ -16,5 +16,3 @@ FEATURE [FEATURE_TITLE]
 Then on the Leave a comment, just be clear in the description of the issue and be direct.
 
 For the [FEATURE_TITLE], it can be anything descriptive and appropriate.
-
-For other inquiries, please don't hesitate to contact me at: alexius.academia@gmail.com or visit my webpage at https://alexiusacademia.com
