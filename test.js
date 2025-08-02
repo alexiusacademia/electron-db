@@ -391,6 +391,172 @@ async function main() {
         }
     });
 
+    // Test Promise-based API
+    await runTest("Promise API - createTableAsync", async () => {
+        const tableName = 'test_promise_table';
+        const result = await db.createTableAsync(tableName, TEST_DIR_CUSTOM);
+        if (!result.includes('created successfully')) {
+            throw new Error(`Expected success message, got: ${result}`);
+        }
+        
+        // Verify table was created
+        const exists = await db.tableExistsAsync(tableName, TEST_DIR_CUSTOM);
+        if (exists !== true) {
+            throw new Error('Table should exist after creation');
+        }
+    });
+
+    await runTest("Promise API - insertTableContentAsync and getAllAsync", async () => {
+        const tableName = 'test_promise_table';
+        const testData = { name: 'Promise Test', value: 42 };
+        
+        const insertResult = await db.insertTableContentAsync(tableName, TEST_DIR_CUSTOM, testData);
+        if (!insertResult.message || !insertResult.message.includes('successfully')) {
+            throw new Error(`Expected success message, got: ${JSON.stringify(insertResult)}`);
+        }
+        
+        const allData = await db.getAllAsync(tableName, TEST_DIR_CUSTOM);
+        if (!Array.isArray(allData)) {
+            throw new Error('getAllAsync should return an array');
+        }
+        if (allData.length === 0) {
+            throw new Error('Should have at least one record');
+        }
+        if (allData[0].name !== 'Promise Test') {
+            throw new Error('Record should have correct name');
+        }
+        if (allData[0].value !== 42) {
+            throw new Error('Record should have correct value');
+        }
+    });
+
+    await runTest("Promise API - getRowsAsync", async () => {
+        const tableName = 'test_promise_table';
+        const rows = await db.getRowsAsync(tableName, TEST_DIR_CUSTOM, { name: 'Promise Test' });
+        if (!Array.isArray(rows)) {
+            throw new Error('getRowsAsync should return an array');
+        }
+        if (rows.length !== 1) {
+            throw new Error('Should find exactly one matching record');
+        }
+        if (rows[0].name !== 'Promise Test') {
+            throw new Error('Found record should have correct name');
+        }
+    });
+
+    await runTest("Promise API - updateRowAsync", async () => {
+        const tableName = 'test_promise_table';
+        const updateResult = await db.updateRowAsync(tableName, TEST_DIR_CUSTOM, 
+            { name: 'Promise Test' }, { value: 100 });
+        if (!updateResult.message || !updateResult.message.includes('updated')) {
+            throw new Error(`Expected update message, got: ${JSON.stringify(updateResult)}`);
+        }
+        
+        const updatedRows = await db.getRowsAsync(tableName, TEST_DIR_CUSTOM, { name: 'Promise Test' });
+        if (updatedRows[0].value !== 100) {
+            throw new Error('Value should be updated to 100');
+        }
+    });
+
+    await runTest("Promise API - searchAsync", async () => {
+        const tableName = 'test_promise_table';
+        const searchResults = await db.searchAsync(tableName, TEST_DIR_CUSTOM, 'name', 'Promise');
+        if (!Array.isArray(searchResults)) {
+            throw new Error('searchAsync should return an array');
+        }
+        if (searchResults.length !== 1) {
+            throw new Error('Should find one matching record');
+        }
+        if (searchResults[0].name !== 'Promise Test') {
+            throw new Error('Found record should match search');
+        }
+    });
+
+    await runTest("Promise API - countAsync", async () => {
+        const tableName = 'test_promise_table';
+        const count = await db.countAsync(tableName, TEST_DIR_CUSTOM);
+        if (typeof count !== 'number') {
+            throw new Error('countAsync should return a number');
+        }
+        if (count !== 1) {
+            throw new Error('Should have exactly one record');
+        }
+    });
+
+    await runTest("Promise API - getFieldAsync", async () => {
+        const tableName = 'test_promise_table';
+        const names = await db.getFieldAsync(tableName, TEST_DIR_CUSTOM, 'name');
+        if (!Array.isArray(names)) {
+            throw new Error('getFieldAsync should return an array');
+        }
+        if (names.length !== 1) {
+            throw new Error('Should have one name');
+        }
+        if (names[0] !== 'Promise Test') {
+            throw new Error('Should return correct name');
+        }
+    });
+
+    await runTest("Promise API - deleteRowAsync", async () => {
+        const tableName = 'test_promise_table';
+        const deleteResult = await db.deleteRowAsync(tableName, TEST_DIR_CUSTOM, { name: 'Promise Test' });
+        if (!deleteResult.message || !deleteResult.message.includes('deleted')) {
+            throw new Error(`Expected delete message, got: ${JSON.stringify(deleteResult)}`);
+        }
+        
+        const remainingRows = await db.getAllAsync(tableName, TEST_DIR_CUSTOM);
+        if (remainingRows.length !== 0) {
+            throw new Error('Should have no records after deletion');
+        }
+    });
+
+    await runTest("Promise API - clearTableAsync", async () => {
+        const tableName = 'test_promise_table';
+        
+        // Add some data first
+        await db.insertTableContentAsync(tableName, TEST_DIR_CUSTOM, { test: 'data' });
+        
+        const clearResult = await db.clearTableAsync(tableName, TEST_DIR_CUSTOM);
+        if (!clearResult.includes('cleared')) {
+            throw new Error(`Expected clear message, got: ${clearResult}`);
+        }
+        
+        const count = await db.countAsync(tableName, TEST_DIR_CUSTOM);
+        if (count !== 0) {
+            throw new Error('Table should be empty after clearing');
+        }
+    });
+
+    await runTest("Promise API - Error handling", async () => {
+        try {
+            await db.getAllAsync('nonexistent_table', TEST_DIR_CUSTOM);
+            throw new Error('Should have thrown an error for nonexistent table');
+        } catch (error) {
+            if (!(error instanceof Error)) {
+                throw new Error('Should throw an Error object');
+            }
+            if (!error.message.includes('ENOENT') && !error.message.includes('not found')) {
+                throw new Error('Error message should indicate file not found');
+            }
+        }
+    });
+
+    await runTest("Promise API - Promisify utility", async () => {
+        // Test the promisify utility function
+        const promisifiedCreateTable = db.promisify(db.createTable);
+        const tableName = 'test_promisify_table';
+        
+        const result = await promisifiedCreateTable(tableName, TEST_DIR_CUSTOM);
+        if (!result.includes('created successfully')) {
+            throw new Error(`Expected success message, got: ${result}`);
+        }
+        
+        const exists = await db.tableExistsAsync(tableName, TEST_DIR_CUSTOM);
+        if (exists !== true) {
+            throw new Error('Table should exist after creation with promisify');
+        }
+    });
+
 
     // Final Summary
     console.log(`\n--- Test Summary ---`);

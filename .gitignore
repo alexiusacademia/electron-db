@@ -1,1 +1,4 @@
 collections/
+demo_data/
+test_db_collections_custom/
+node_modules/

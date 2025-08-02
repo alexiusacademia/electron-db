@@ -1,11 +1,13 @@
 {
     "name": "electron-db",
-    "version": "0.15.5",
-    "description": "Electron module that simulates database table operations which really just uses json file to store tables in the Application Folder.",
+    "version": "1.0.0",
+    "description": "Modern flat file database solution for Electron and Node.js applications. Simple JSON-based database with both callback and Promise/async-await support.",
     "main": "index.js",
+    "types": "index.d.ts",
     "scripts": {
         "start": "node index.js",
-        "test": "node test.js"
+        "test": "node test.js",
+        "demo": "node demo.js"
     },
     "author": "Alexius Academia <alexius.academia@gmail.com> (https://alexiusacademia.com)",
     "license": "MIT",
@@ -15,12 +17,20 @@
         "url": "https://github.com/alexiusacademia/electron-db"
     },
     "devDependencies": {},
+    "engines": {
+        "node": ">=14.0.0"
+    },
     "keywords": [
         "electron",
         "database",
         "json database",
         "json table",
         "electron database",
-        "electron simple database"
+        "electron simple database",
+        "async",
+        "promises",
+        "typescript",
+        "flat file database",
+        "local database"
     ]
 }
