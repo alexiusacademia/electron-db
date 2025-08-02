@@ -1197,8 +1197,43 @@ function insertTableContents(tableName, locationOrRows, rowsOrCb, callbackIfLoca
 }
 
 
+// Promise wrapper utility function
+function promisify(fn) {
+    return (...args) => {
+        return new Promise((resolve, reject) => {
+            // Find the callback position - it's always the last argument
+            const callback = (err, result) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(result);
+                }
+            };
+            
+            // Call the original function with the callback
+            fn(...args, callback);
+        });
+    };
+}
+
+// Create Promise versions of all functions
+const createTableAsync = promisify(createTable);
+const insertTableContentAsync = promisify(insertTableContent);
+const insertTableContentsAsync = promisify(insertTableContents);
+const getAllAsync = promisify(getAll);
+const getRowsAsync = promisify(getRows);
+const updateRowAsync = promisify(updateRow);
+const searchAsync = promisify(search);
+const deleteRowAsync = promisify(deleteRow);
+const validAsync = promisify(valid);
+const clearTableAsync = promisify(clearTable);
+const getFieldAsync = promisify(getField);
+const countAsync = promisify(count);
+const tableExistsAsync = promisify(tableExists);
+
 // Export the public available functions
 module.exports = {
+    // Legacy callback-based API (maintained for backward compatibility)
     createTable,
     insertTableContent,
     getAll,
@@ -1211,6 +1246,24 @@ module.exports = {
     getField,
     count,
     tableExists,
+    insertTableContents,
+    
+    // Modern Promise-based API
+    createTableAsync,
+    insertTableContentAsync,
+    insertTableContentsAsync,
+    getAllAsync,
+    getRowsAsync,
+    updateRowAsync,
+    searchAsync,
+    deleteRowAsync,
+    validAsync,
+    clearTableAsync,
+    getFieldAsync,
+    countAsync,
+    tableExistsAsync,
+    
+    // Utility functions
     _getInternals: () => ({ userData }), // Added for testing
-    insertTableContents // Added new function
+    promisify // Export promisify for users who want to wrap other functions
 };

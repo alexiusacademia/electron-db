@@ -3,9 +3,9 @@
 [![Build Status](https://travis-ci.org/alexiusacademia/electron-db.svg?branch=master)](https://travis-ci.org/alexiusacademia/electron-db)
 [![NPM version](https://img.shields.io/npm/v/electron-db.svg)](https://npmjs.org/package/electron-db "View this project on NPM")
 [![NPM downloads](https://img.shields.io/npm/dm/electron-db.svg)](https://npmjs.org/package/electron-db "View this project on NPM")
-> Flat file database solution for electron and other Nodejs apps.
+> Modern flat file database solution for Electron and Node.js applications.
 
-**electron-db** is an npm library that let you simplify database creation and operation on a json file.
+**electron-db** is a lightweight npm library that provides a simple database-like API for JSON file operations. Now with **Promise/async-await support** alongside the original callback API for maximum compatibility and modern development practices.
 
 The json file is saved on the application folder or you can specify the location for the database to be created. From version 0.10.0, the user has the option to save the database table anywhere they chose.
 
@@ -32,32 +32,84 @@ The preferred way of installation is to install it locally on the application.
 npm install electron-db --save
 ```
 
+## **API Styles**
+
+**electron-db** supports both traditional callback-style and modern Promise/async-await APIs:
+
+### **Callback Style (Legacy)**
+```javascript
+const db = require('electron-db');
+
+db.createTable('customers', (err, msg) => {
+  if (err) console.error(err);
+  else console.log(msg);
+});
+```
+
+### **Promise/Async Style (Modern)**
+```javascript
+const db = require('electron-db');
+
+// Using Promises
+db.createTableAsync('customers')
+  .then(msg => console.log(msg))
+  .catch(err => console.error(err));
+
+// Using async/await (recommended)
+async function createCustomersTable() {
+  try {
+    const msg = await db.createTableAsync('customers');
+    console.log(msg);
+  } catch (err) {
+    console.error(err);
+  }
+}
+```
+
 ### **Creating Table**
-Creates a json file `[table-name].js` inside the application `userData` folder.
+Creates a json file `[table-name].json` inside the application `userData` folder.
 
 In Windows, the application folder should be in `C:\Users\[username]\AppData\Roaming\[application name]`
 
+#### **Callback Style**
 ```javascript
-
 const db = require('electron-db');
 const { app, BrowserWindow } = require("electron");
 
-db.createTable('customers', (succ, msg) => {
-  // succ - boolean, tells if the call is successful
-  console.log("Success: " + succ);
-  console.log("Message: " + msg);
+db.createTable('customers', (err, msg) => {
+  if (err) {
+    console.error("Error:", err.message);
+  } else {
+    console.log("Message:", msg);
+  }
 })
 
 /*
 	Output:
-    	Success: true
-        Message: Success!
+        Message: Table 'customers' created successfully at [path].
 
 	Result file (customers.json):
     {
     	"customers": []
     }
 */
+```
+
+#### **Modern Async Style**
+```javascript
+const db = require('electron-db');
+const { app, BrowserWindow } = require("electron");
+
+async function setupDatabase() {
+  try {
+    const msg = await db.createTableAsync('customers');
+    console.log("Message:", msg);
+  } catch (err) {
+    console.error("Error:", err.message);
+  }
+}
+
+setupDatabase();
 ```
 
 ### **Creating Table specifying the Location**
@@ -84,23 +136,51 @@ Insert an object into the list of row/data of the table.
 To insert to a custom location, pass the custom location as the second argument
 as shown in the sample above. But do not forget to check if the database is valid.
 
+#### **Callback Style**
 ```javascript
-let obj = new Object();
+let obj = {
+  name: "Alexius Academia",
+  address: "Paco, Botolan, Zambales"
+};
 
-obj.name = "Alexius Academia";
-obj.address = "Paco, Botolan, Zambales";
+db.valid('customers', (err, isValid) => {
+  if (err) {
+    console.error("Error:", err.message);
+  } else if (isValid) {
+    db.insertTableContent('customers', obj, (err, msg) => {
+      if (err) {
+        console.error("Error:", err.message);
+      } else {
+        console.log("Message:", msg);
+      }
+    });
+  }
+});
+```
 
-if (db.valid('customers')) {
-  db.insertTableContent('customers', obj, (succ, msg) => {
-    // succ - boolean, tells if the call is successful
-    console.log("Success: " + succ);
-    console.log("Message: " + msg);
-  })
+#### **Modern Async Style**
+```javascript
+const obj = {
+  name: "Alexius Academia",
+  address: "Paco, Botolan, Zambales"
+};
+
+async function insertCustomer() {
+  try {
+    const isValid = await db.validAsync('customers');
+    if (isValid) {
+      const msg = await db.insertTableContentAsync('customers', obj);
+      console.log("Message:", msg);
+    }
+  } catch (err) {
+    console.error("Error:", err.message);
+  }
 }
+
+insertCustomer();
 
 /*
 	Output:
-    	Success: true
         Message: Object written successfully!
 
     Result file (customers.json):
@@ -108,11 +188,11 @@ if (db.valid('customers')) {
       "customers": [
         {
           "name": "Alexius Academia",
-          "address": "Paco, Botolan, Zambales"
+          "address": "Paco, Botolan, Zambales",
+          "id": 1640995200000
         }
       ]
     }
-
 */
 ```
 
@@ -157,18 +237,37 @@ db.insertTableContents('records', m, (isSuccess, message) => {
 ```
 -->
 ### **Get all rows**
-Get all the rows for a given table by using the callback function.
+Get all the rows for a given table.
+
+#### **Callback Style**
 ```javascript
-
 const db = require('electron-db');
-const electron = require('electron');
 
-const app = electron.app || electron.remote.app;
+db.getAll('customers', (err, data) => {
+  if (err) {
+    console.error("Error:", err.message);
+  } else {
+    console.log("Data:", data);
+    // data - array of objects that represents the rows.
+  }
+});
+```
 
-db.getAll('customers', (succ, data) => {
-  // succ - boolean, tells if the call is successful
-  // data - array of objects that represents the rows.
-})
+#### **Modern Async Style**
+```javascript
+const db = require('electron-db');
+
+async function getAllCustomers() {
+  try {
+    const data = await db.getAllAsync('customers');
+    console.log("Data:", data);
+    // data - array of objects that represents the rows.
+  } catch (err) {
+    console.error("Error:", err.message);
+  }
+}
+
+getAllCustomers();
 ```
 ### **Get Row(s) from the table**
 Get row or rows that matched the given condition(s) in WHERE argument
@@ -305,5 +404,86 @@ db.count(dbName, dbLocation, (succ, data) => {
     }
 })
 ```
+
+## **TypeScript Support**
+
+**electron-db** now includes TypeScript definitions! You get full type safety and IntelliSense support:
+
+```typescript
+import * as db from 'electron-db';
+// or: const db = require('electron-db');
+
+interface Customer {
+  name: string;
+  address: string;
+  id?: number;
+}
+
+async function manageCustomers() {
+  // TypeScript will provide full type checking and autocomplete
+  await db.createTableAsync('customers');
+  
+  const customer: Customer = {
+    name: "John Doe",
+    address: "123 Main St"
+  };
+  
+  await db.insertTableContentAsync('customers', customer);
+  const customers: Customer[] = await db.getAllAsync('customers');
+  
+  console.log(customers);
+}
+```
+
+## **Migration Guide**
+
+### **From v0.x to v1.0**
+
+**Good news!** Your existing code will continue to work unchanged. All callback-based functions are still available and fully supported.
+
+To modernize your code:
+
+1. **Add `Async` suffix** to function names for Promise versions:
+   ```javascript
+   // Old (still works)
+   db.getAll('table', (err, data) => { ... });
+   
+   // New (recommended)
+   const data = await db.getAllAsync('table');
+   ```
+
+2. **Update error handling**:
+   ```javascript
+   // Old
+   db.createTable('table', (err, msg) => {
+     if (err) console.error(err);
+     else console.log(msg);
+   });
+   
+   // New
+   try {
+     const msg = await db.createTableAsync('table');
+     console.log(msg);
+   } catch (err) {
+     console.error(err);
+   }
+   ```
+
+3. **Use modern JavaScript features**:
+   - `const`/`let` instead of `var`
+   - `async`/`await` instead of callbacks
+   - Template literals instead of string concatenation
+
+## **Performance Notes**
+
+- All file operations are now asynchronous by default in the Promise API
+- Backward compatibility is maintained for callback-based functions
+- Consider using the `promisify` utility for custom callback functions
+
+## **Requirements**
+
+- **Node.js**: 14.0.0 or higher
+- **Electron**: All versions supported
+- **TypeScript**: 3.7+ (if using TypeScript)
 
 For contributions, please see the `CONTRIBUTE.md` file. Thank you.
