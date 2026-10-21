@@ -1,414 +1,283 @@
-const db = require('./index');
-const fs = require('fs').promises;
-const fsSync = require('fs'); // For specific sync operations if needed during test setup
+// Tests for electron-db. Run with: npm test
+// Every table is created in a temporary folder that is removed at the end.
+
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const os = require('os'); // Required for replicating default path logic if _getInternals is not used
+const db = require('./index');
 
-const TEST_DIR_CUSTOM = path.join(__dirname, 'test_db_collections_custom');
-// Default path will be retrieved using db._getInternals()
-let DEFAULT_USER_DATA_PATH;
-// Specific table names for default path tests to allow targeted cleanup
-const DEFAULT_PATH_TABLE_1 = 'test_default_table_1';
-const DEFAULT_PATH_TABLE_2_FOR_VALID_TEST = 'test_default_table_2_for_valid_test';
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'electron-db-test-'));
+const tests = [];
+let failed = 0;
 
-let testsPassed = 0;
-let testsFailed = 0;
-
-// Helper to create a promise-based version of db functions
-function promisifyDb(fnName) {
-    return (...args) => {
-        return new Promise((resolve, reject) => {
-            db[fnName](...args, (err, data) => {
-                if (err) {
-                    return reject(err);
-                }
-                resolve(data);
-            });
-        });
-    };
+function test(name, fn) {
+    tests.push({ name, fn });
 }
 
-const createTableAsync = promisifyDb('createTable');
-const tableExistsAsync = promisifyDb('tableExists');
-const validAsync = promisifyDb('valid');
-const insertTableContentAsync = promisifyDb('insertTableContent');
-const getAllAsync = promisifyDb('getAll');
-const getRowsAsync = promisifyDb('getRows');
-const updateRowAsync = promisifyDb('updateRow');
-const deleteRowAsync = promisifyDb('deleteRow');
-const searchAsync = promisifyDb('search');
-const getFieldAsync = promisifyDb('getField');
-const countAsync = promisifyDb('count');
-const clearTableAsync = promisifyDb('clearTable');
-const insertTableContentsAsync = promisifyDb('insertTableContents');
-
-
-async function runTest(description, testFn) {
-    console.log(`\nRunning: ${description}`);
-    try {
-        await testFn();
-        console.log(`  PASS: ${description}`);
-        testsPassed++;
-    } catch (error) {
-        console.error(`  FAIL: ${description}`);
-        console.error('    Error:', error.message || error);
-        if (error.stack) {
-            // console.error('    Stack:', error.stack.split('\n').slice(1).join('\n'));
-        }
-        testsFailed++;
-    }
+// Call a db function and return what it passed to its callback.
+function call(fnName, ...args) {
+    let result = null;
+    const returned = db[fnName](...args, (succ, data, extra) => {
+        result = { succ, data, extra };
+    });
+    assert.ok(result, `${fnName} did not call its callback`);
+    result.returned = returned;
+    return result;
 }
 
-async function setup() {
-    console.log('Setting up test environment...');
-    await fs.mkdir(TEST_DIR_CUSTOM, { recursive: true });
-
-    // Get default userData path from the module itself for cleanup
-    if (db._getInternals && typeof db._getInternals === 'function') {
-        try {
-            DEFAULT_USER_DATA_PATH = db._getInternals().userData;
-            console.log(`  Default userData path for cleanup: ${DEFAULT_USER_DATA_PATH}`);
-        } catch(e) {
-            console.warn("  Could not get userData path from db._getInternals(). Default path cleanup might be incomplete.");
-        }
-    } else {
-         console.warn("  db._getInternals() not available. Default path cleanup might be incomplete.");
-    }
-    console.log('Setup complete.');
+// A fresh table with the given rows, inserted with their own ids.
+function freshTable(name, rows) {
+    call('createTable', name, dir);
+    rows.forEach((row) => call('insertTableContent', name, dir, Object.assign({}, row)));
 }
 
-async function cleanup() {
-    console.log('\nCleaning up test environment...');
-    try {
-        await fs.rm(TEST_DIR_CUSTOM, { recursive: true, force: true });
-        console.log(`  Removed custom test directory: ${TEST_DIR_CUSTOM}`);
-    } catch (e) {
-        console.error(`  Error removing custom test directory: ${TEST_DIR_CUSTOM}`, e.message);
-    }
-
-    if (DEFAULT_USER_DATA_PATH) {
-        try {
-            const defaultTable1Path = path.join(DEFAULT_USER_DATA_PATH, DEFAULT_PATH_TABLE_1 + '.json');
-            if (fsSync.existsSync(defaultTable1Path)) {
-                await fs.unlink(defaultTable1Path);
-                console.log(`  Cleaned up default path table: ${defaultTable1Path}`);
-            }
-            const defaultTable2Path = path.join(DEFAULT_USER_DATA_PATH, DEFAULT_PATH_TABLE_2_FOR_VALID_TEST + '.json');
-             if (fsSync.existsSync(defaultTable2Path)) {
-                await fs.unlink(defaultTable2Path);
-                console.log(`  Cleaned up default path table: ${defaultTable2Path}`);
-            }
-        } catch (e) {
-            console.error(`  Error cleaning default path tables: `, e.message);
-        }
-    }
-    console.log('Cleanup complete.');
+function rowsOf(name) {
+    return JSON.parse(fs.readFileSync(path.join(dir, name + '.json'), 'utf-8'))[name];
 }
 
-async function main() {
-    await setup();
+// --- createTable, valid, tableExists ---------------------------------------
 
-    // --- createTable ---
-    await runTest("createTable: successfully creates a table at custom location", async () => {
-        const tableName = "usersCustom";
-        const result = await createTableAsync(tableName, TEST_DIR_CUSTOM);
-        if (!result || !result.toLowerCase().includes("success")) throw new Error("Success message not received.");
-        const tablePath = path.join(TEST_DIR_CUSTOM, tableName + '.json');
-        if (!fsSync.existsSync(tablePath)) throw new Error(`Table file not found at ${tablePath}`);
-    });
-
-    await runTest("createTable: successfully creates a table at default location", async () => {
-        // This test relies on DEFAULT_USER_DATA_PATH being set for cleanup.
-        if (!DEFAULT_USER_DATA_PATH) {
-            console.warn("  Skipping default path test for createTable as DEFAULT_USER_DATA_PATH is not set.");
-            testsPassed++; // Count as passed to not fail the suite due to setup issue outside test's control
-            return;
-        }
-        const result = await createTableAsync(DEFAULT_PATH_TABLE_1); // No location, uses default
-        if (!result || !result.toLowerCase().includes("success")) throw new Error("Success message not received for default path.");
-        const tablePath = path.join(DEFAULT_USER_DATA_PATH, DEFAULT_PATH_TABLE_1 + '.json');
-        if (!fsSync.existsSync(tablePath)) throw new Error(`Default table file not found at ${tablePath}`);
-    });
-
-    await runTest("createTable: fails if table already exists", async () => {
-        const tableName = "usersCustomExists";
-        await createTableAsync(tableName, TEST_DIR_CUSTOM); // Create first time
-        try {
-            await createTableAsync(tableName, TEST_DIR_CUSTOM); // Attempt to create again
-            throw new Error("createTable should have failed for existing table.");
-        } catch (error) {
-            if (!error.message.includes("already exists")) {
-                throw new Error(`Expected 'already exists' error, got: ${error.message}`);
-            }
-        }
-    });
-
-    // --- tableExists ---
-    await runTest("tableExists: returns true for an existing table (custom)", async () => {
-        const tableName = "checkExistsCustom";
-        await createTableAsync(tableName, TEST_DIR_CUSTOM);
-        const exists = await tableExistsAsync(tableName, TEST_DIR_CUSTOM);
-        if (!exists) throw new Error("tableExists returned false for an existing table.");
-    });
-
-    await runTest("tableExists: returns false for non-existing table", async () => {
-        const exists = await tableExistsAsync("nonExistentTable", TEST_DIR_CUSTOM);
-        if (exists) throw new Error("tableExists returned true for a non-existing table.");
-    });
-
-    // --- valid ---
-    await runTest("valid: returns true for a valid table file", async () => {
-        const tableName = "validTableCustom";
-        await createTableAsync(tableName, TEST_DIR_CUSTOM);
-        const isValid = await validAsync(tableName, TEST_DIR_CUSTOM);
-        if (!isValid) throw new Error("valid returned false for a valid table file.");
-    });
-
-    await runTest("valid: returns false for a non-existent table file", async () => {
-        const isValid = await validAsync("nonExistentForValid", TEST_DIR_CUSTOM);
-        if (isValid) throw new Error("valid returned true for a non-existent table.");
-    });
-
-    await runTest("valid: returns false for a corrupted JSON file", async () => {
-        const tableName = "corruptedTable";
-        const tablePath = path.join(TEST_DIR_CUSTOM, tableName + ".json");
-        // Ensure dir exists before writing corrupted file
-        await fs.mkdir(path.dirname(tablePath), { recursive: true });
-        await fs.writeFile(tablePath, "{name: 'test', age: 30, invalidJson: }"); // Write invalid JSON
-        const isValid = await validAsync(tableName, TEST_DIR_CUSTOM);
-        if (isValid) throw new Error("valid returned true for a corrupted JSON file.");
-    });
-
-    // --- insertTableContent ---
-    const insertTableNameCustom = "insertCustom";
-    await runTest("insertTableContent: (setup) create table for insert tests", async () => {
-        await createTableAsync(insertTableNameCustom, TEST_DIR_CUSTOM);
-    });
-
-    await runTest("insertTableContent: inserts record with generated ID (custom)", async () => {
-        const record = { name: "Alice", age: 30 };
-        const result = await insertTableContentAsync(insertTableNameCustom, TEST_DIR_CUSTOM, record);
-        if (!result.id) throw new Error("Generated ID not returned in callback.");
-        if (result.message.toLowerCase().indexOf("success") === -1) throw new Error("Success message not found.");
-    });
-
-    await runTest("insertTableContent: inserts record with provided ID (custom)", async () => {
-        const record = { id: "custom123", name: "Bob", occupation: "Builder" };
-        const result = await insertTableContentAsync(insertTableNameCustom, TEST_DIR_CUSTOM, record);
-        if (result.id !== "custom123") throw new Error("Provided ID not used or returned correctly.");
-    });
-
-    // --- getAll ---
-    await runTest("getAll: retrieves all records (custom)", async () => {
-        const records = await getAllAsync(insertTableNameCustom, TEST_DIR_CUSTOM);
-        if (!Array.isArray(records)) throw new Error("getAll did not return an array.");
-        if (records.length !== 2) throw new Error(`Expected 2 records, got ${records.length}`);
-    });
-
-    // --- getRows ---
-    await runTest("getRows: retrieves rows matching criteria (custom)", async () => {
-        const rows = await getRowsAsync(insertTableNameCustom, TEST_DIR_CUSTOM, { name: "Alice" });
-        if (rows.length !== 1 || rows[0].name !== "Alice") throw new Error("getRows did not retrieve correct row.");
-    });
-    await runTest("getRows: returns empty array for no match (custom)", async () => {
-        const rows = await getRowsAsync(insertTableNameCustom, TEST_DIR_CUSTOM, { name: "NonExistent" });
-        if (rows.length !== 0) throw new Error("getRows did not return empty array for no match.");
-    });
-
-    // --- updateRow ---
-    const updateTableName = "updateTestCustom";
-    await runTest("updateRow: (setup) create and populate table for update tests", async () => {
-        await createTableAsync(updateTableName, TEST_DIR_CUSTOM);
-        await insertTableContentAsync(updateTableName, TEST_DIR_CUSTOM, { id: 1, name: "Charlie", version: 1 });
-        await insertTableContentAsync(updateTableName, TEST_DIR_CUSTOM, { id: 2, name: "Carol", version: 1 });
-        await insertTableContentAsync(updateTableName, TEST_DIR_CUSTOM, { id: 3, name: "Charlie", version: 1 }); // Another Charlie
-    });
-
-    await runTest("updateRow: updates a single row and verifies count/change", async () => {
-        const result = await updateRowAsync(updateTableName, TEST_DIR_CUSTOM, { id: 1 }, { version: 2, status: "active" });
-        if (result.count !== 1) throw new Error(`Expected 1 record updated, got ${result.count}`);
-        const rows = await getRowsAsync(updateTableName, TEST_DIR_CUSTOM, { id: 1 });
-        if (rows[0].version !== 2 || rows[0].status !== "active") throw new Error("Row not updated correctly.");
-    });
-
-    await runTest("updateRow: updates multiple rows and verifies count", async () => {
-        const result = await updateRowAsync(updateTableName, TEST_DIR_CUSTOM, { name: "Charlie" }, { status: "verified" });
-        if (result.count !== 2) throw new Error(`Expected 2 records updated for name Charlie, got ${result.count}`);
-        const rows = await getRowsAsync(updateTableName, TEST_DIR_CUSTOM, { name: "Charlie" });
-        if (rows.some(r => r.status !== "verified")) throw new Error("Not all Charlie rows updated.");
-    });
-
-    await runTest("updateRow: returns count 0 for no matching rows", async () => {
-        const result = await updateRowAsync(updateTableName, TEST_DIR_CUSTOM, { name: "NonExistent" }, { status: "ghost" });
-        if (result.count !== 0) throw new Error("Expected 0 records updated for non-matching criteria.");
-    });
-
-    await runTest("updateRow: fails for empty WHERE clause", async () => {
-        try {
-            await updateRowAsync(updateTableName, TEST_DIR_CUSTOM, {}, { status: "DANGER" });
-            throw new Error("updateRow should have failed for empty WHERE clause.");
-        } catch (error) {
-            if (!error.message.toLowerCase().includes("where clause is empty")) {
-                throw new Error(`Expected 'empty where' error, got: ${error.message}`);
-            }
-        }
-    });
-
-    // --- deleteRow ---
-    const deleteTableName = "deleteTestCustom";
-     await runTest("deleteRow: (setup) create and populate for delete tests", async () => {
-        await createTableAsync(deleteTableName, TEST_DIR_CUSTOM);
-        await insertTableContentAsync(deleteTableName, TEST_DIR_CUSTOM, { id: 'd1', name: "Dave", category: "A" });
-        await insertTableContentAsync(deleteTableName, TEST_DIR_CUSTOM, { id: 'd2', name: "Diana", category: "B" });
-        await insertTableContentAsync(deleteTableName, TEST_DIR_CUSTOM, { id: 'd3', name: "Dave", category: "C" });
-    });
-
-    await runTest("deleteRow: deletes a single row and verifies count", async () => {
-        const result = await deleteRowAsync(deleteTableName, TEST_DIR_CUSTOM, { id: 'd2' });
-        if (result.count !== 1) throw new Error(`Expected 1 record deleted, got ${result.count}`);
-        const rows = await getAllAsync(deleteTableName, TEST_DIR_CUSTOM);
-        if (rows.length !== 2 || rows.find(r => r.id === 'd2')) throw new Error("Row not deleted or incorrect row deleted.");
-    });
-
-    await runTest("deleteRow: deletes multiple rows and verifies count", async () => {
-        const result = await deleteRowAsync(deleteTableName, TEST_DIR_CUSTOM, { name: "Dave" });
-        if (result.count !== 2) throw new Error(`Expected 2 records deleted for name Dave, got ${result.count}`);
-        const rows = await getAllAsync(deleteTableName, TEST_DIR_CUSTOM);
-        if (rows.length !== 0) throw new Error("Not all Dave rows deleted, or table not empty.");
-    });
-
-    await runTest("deleteRow: returns count 0 for no matching rows", async () => {
-        // Repopulate for this test
-        await insertTableContentAsync(deleteTableName, TEST_DIR_CUSTOM, { id: 'd4', name: "Derek" });
-        const result = await deleteRowAsync(deleteTableName, TEST_DIR_CUSTOM, { name: "NonExistent" });
-        if (result.count !== 0) throw new Error("Expected 0 records deleted for non-matching criteria.");
-        const rows = await getAllAsync(deleteTableName, TEST_DIR_CUSTOM);
-        if (rows.length !== 1) throw new Error("Table should have 1 record after no-match delete.");
-    });
-
-    await runTest("deleteRow: fails for empty WHERE clause", async () => {
-        try {
-            await deleteRowAsync(deleteTableName, TEST_DIR_CUSTOM, {});
-            throw new Error("deleteRow should have failed for empty WHERE clause.");
-        } catch (error) {
-            if (!error.message.toLowerCase().includes("where clause cannot be empty")) {
-                throw new Error(`Expected 'empty where' error, got: ${error.message}`);
-            }
-        }
-    });
-
-    // --- count ---
-    const countTableName = "countTestCustom";
-    await runTest("count: (setup) create table for count tests", async () => {
-         await createTableAsync(countTableName, TEST_DIR_CUSTOM);
-    });
-    await runTest("count: returns 0 for an empty table", async () => {
-        const num = await countAsync(countTableName, TEST_DIR_CUSTOM);
-        if (num !== 0) throw new Error(`Expected count 0 for empty table, got ${num}`);
-    });
-    await runTest("count: returns correct count for non-empty table", async () => {
-        await insertTableContentAsync(countTableName, TEST_DIR_CUSTOM, { name: "Eve" });
-        await insertTableContentAsync(countTableName, TEST_DIR_CUSTOM, { name: "Enoch" });
-        const num = await countAsync(countTableName, TEST_DIR_CUSTOM);
-        if (num !== 2) throw new Error(`Expected count 2, got ${num}`);
-    });
-
-    // --- clearTable ---
-    await runTest("clearTable: clears all records from a table", async () => {
-        await clearTableAsync(countTableName, TEST_DIR_CUSTOM);
-        const num = await countAsync(countTableName, TEST_DIR_CUSTOM);
-        if (num !== 0) throw new Error(`Table not cleared, count is ${num}`);
-    });
-
-    // --- insertTableContents ---
-    const bulkInsertTableName = "bulkInsertTestCustom";
-    await runTest("insertTableContents: (setup) create table for bulk insert tests", async () => {
-        await createTableAsync(bulkInsertTableName, TEST_DIR_CUSTOM);
-    });
-
-    await runTest("insertTableContents: successfully inserts multiple records", async () => {
-        const recordsToInsert = [
-            { name: "Bulk User 1", type: "bulk" },
-            { name: "Bulk User 2", type: "bulk" },
-            { id: "customBulkId1", name: "Bulk User 3 with ID", type: "bulk" }
-        ];
-        const result = await insertTableContentsAsync(bulkInsertTableName, TEST_DIR_CUSTOM, recordsToInsert);
-        if (!result || result.ids.length !== 3) throw new Error("insertTableContents did not return correct ID count.");
-        if (!result.ids.includes("customBulkId1")) throw new Error("Custom ID not found in returned IDs.");
-
-        const allRecords = await getAllAsync(bulkInsertTableName, TEST_DIR_CUSTOM);
-        if (allRecords.length !== 3) throw new Error(`Expected 3 records after bulk insert, got ${allRecords.length}`);
-        if (!allRecords.find(r => r.id === "customBulkId1")) throw new Error("Record with custom ID not found after bulk insert.");
-        if (allRecords.filter(r => r.type === "bulk").length !== 3) throw new Error("Not all bulk records seem to be inserted or have correct type.");
-    });
-
-    await runTest("insertTableContents: inserts more records, some with ID, some without", async () => {
-        const recordsToInsert = [
-            { name: "Bulk User 4", type: "bulk-more" }, // Will get auto ID
-            { id: "customBulkId2", name: "Bulk User 5 with ID", type: "bulk-more" }
-        ];
-        const result = await insertTableContentsAsync(bulkInsertTableName, TEST_DIR_CUSTOM, recordsToInsert);
-        if (!result || result.ids.length !== 2) throw new Error("insertTableContents did not return correct ID count for second batch.");
-        if (!result.ids.includes("customBulkId2")) throw new Error("Custom ID from second batch not found in returned IDs.");
-
-        const allRecords = await getAllAsync(bulkInsertTableName, TEST_DIR_CUSTOM);
-        // Previous test had 3, this adds 2 = 5 total
-        if (allRecords.length !== 5) throw new Error(`Expected 5 records after second bulk insert, got ${allRecords.length}`);
-        if (allRecords.filter(r => r.type === "bulk-more").length !== 2) throw new Error("Not all 'bulk-more' records inserted.");
-    });
-
-    await runTest("insertTableContents: fails when inserting an empty array", async () => {
-        try {
-            await insertTableContentsAsync(bulkInsertTableName, TEST_DIR_CUSTOM, []);
-            throw new Error("insertTableContents should have failed for empty array.");
-        } catch (error) {
-            if (!error.message.includes("non-empty array")) {
-                throw new Error(`Expected 'non-empty array' error, got: ${error.message}`);
-            }
-        }
-    });
-
-    await runTest("insertTableContents: fails when inserting an array of non-objects", async () => {
-        try {
-            await insertTableContentsAsync(bulkInsertTableName, TEST_DIR_CUSTOM, [1, 2, "string"]);
-            throw new Error("insertTableContents should have failed for array of non-objects.");
-        } catch (error) {
-            if (!error.message.includes("must be objects")) {
-                throw new Error(`Expected 'must be objects' error, got: ${error.message}`);
-            }
-        }
-    });
-
-    await runTest("insertTableContents: fails if table does not exist", async () => {
-        const nonExistentTable = "ghostTableForBulkInsert";
-        try {
-            await insertTableContentsAsync(nonExistentTable, TEST_DIR_CUSTOM, [{ name: "Ghost" }]);
-            throw new Error("insertTableContents should have failed for non-existent table.");
-        } catch (error) {
-            if (!error.message.includes("does not exist or is not accessible")) {
-                throw new Error(`Expected 'does not exist' error, got: ${error.message}`);
-            }
-        }
-    });
-
-
-    // Final Summary
-    console.log(`\n--- Test Summary ---`);
-    console.log(`  Total Tests: ${testsPassed + testsFailed}`);
-    console.log(`  Passed: ${testsPassed}`);
-    console.log(`  Failed: ${testsFailed}`);
-
-    await cleanup();
-
-    if (testsFailed > 0) {
-        console.error("\nSome tests failed. Exiting with error code 1.");
-        process.exit(1);
-    } else {
-        console.log("\nAll tests passed!");
-    }
-}
-
-main().catch(err => {
-    console.error("Critical error during test execution:", err);
-    process.exit(1);
+test('createTable creates an empty table', () => {
+    const r = call('createTable', 'customers', dir);
+    assert.strictEqual(r.succ, true);
+    assert.strictEqual(r.data, 'Success!');
+    assert.deepStrictEqual(rowsOf('customers'), []);
 });
+
+test('createTable refuses an existing table', () => {
+    const r = call('createTable', 'customers', dir);
+    assert.strictEqual(r.succ, false);
+    assert.strictEqual(r.data, 'customers.json already exists!');
+});
+
+test('createTable creates a missing folder', () => {
+    const sub = path.join(dir, 'nested', 'folder');
+    assert.strictEqual(call('createTable', 'deep', sub).succ, true);
+    assert.ok(fs.existsSync(path.join(sub, 'deep.json')));
+});
+
+test('valid and tableExists return booleans', () => {
+    assert.strictEqual(db.valid('customers', dir), true);
+    assert.strictEqual(db.valid('missing', dir), false);
+    fs.writeFileSync(path.join(dir, 'broken.json'), '{ not json');
+    assert.strictEqual(db.valid('broken', dir), false);
+    assert.strictEqual(db.tableExists('customers', dir), true);
+    assert.strictEqual(db.tableExists('missing', dir), false);
+});
+
+// --- insert (#44, #10) -----------------------------------------------------
+
+test('insertTableContent passes and returns the new id (#44)', () => {
+    const row = { name: 'Alexius' };
+    const r = call('insertTableContent', 'customers', dir, row);
+    assert.strictEqual(r.succ, true);
+    assert.strictEqual(r.data, 'Object written successfully!');
+    assert.strictEqual(typeof r.extra, 'number');
+    assert.strictEqual(r.returned, r.extra);
+    assert.strictEqual(row.id, r.extra);
+    assert.strictEqual(rowsOf('customers')[0].id, r.extra);
+});
+
+test('insertTableContent keeps a given id', () => {
+    const r = call('insertTableContent', 'customers', dir, { id: 'abc', name: 'Given' });
+    assert.strictEqual(r.extra, 'abc');
+});
+
+test('inserts in a loop are all kept, with unique ids (#10)', () => {
+    freshTable('loop', []);
+    for (let i = 0; i < 50; i++) {
+        call('insertTableContent', 'loop', dir, { n: i });
+    }
+    const rows = rowsOf('loop');
+    assert.strictEqual(rows.length, 50);
+    assert.strictEqual(new Set(rows.map((r) => r.id)).size, 50);
+});
+
+test('insertTableContent fails for a missing table', () => {
+    const r = call('insertTableContent', 'missing', dir, { a: 1 });
+    assert.strictEqual(r.succ, false);
+    assert.strictEqual(r.returned, undefined);
+});
+
+test('insertTableContents inserts several rows with one call', () => {
+    freshTable('bulk', []);
+    const r = call('insertTableContents', 'bulk', dir, [{ a: 1 }, { a: 2, id: 7 }, { a: 3 }]);
+    assert.strictEqual(r.succ, true);
+    assert.strictEqual(r.extra.length, 3);
+    assert.strictEqual(r.extra[1], 7);
+    assert.strictEqual(rowsOf('bulk').length, 3);
+    assert.strictEqual(call('insertTableContents', 'bulk', dir, []).succ, false);
+    assert.strictEqual(call('insertTableContents', 'bulk', dir, [1, 2]).succ, false);
+});
+
+// --- unique check (#42) ----------------------------------------------------
+
+test('insertWithUniqueCheck refuses a duplicate value (#42)', () => {
+    freshTable('people', [{ name: 'Ann', email: 'ann@x' }]);
+    const dup = call('insertWithUniqueCheck', 'people', dir, { name: 'Ann2', email: 'ann@x' }, ['name', 'email']);
+    assert.strictEqual(dup.succ, false);
+    assert.ok(dup.data.includes("'email'"));
+    const ok = call('insertWithUniqueCheck', 'people', dir, { name: 'Bob', email: 'bob@x' }, 'email');
+    assert.strictEqual(ok.succ, true);
+    assert.strictEqual(typeof ok.extra, 'number');
+    assert.strictEqual(rowsOf('people').length, 2);
+});
+
+test('updateWithUniqueCheck refuses a value another row has (#42)', () => {
+    const r = call('updateWithUniqueCheck', 'people', dir, { name: 'Bob' }, { email: 'ann@x' }, ['email']);
+    assert.strictEqual(r.succ, false);
+    assert.strictEqual(rowsOf('people')[1].email, 'bob@x');
+});
+
+test('updateWithUniqueCheck allows keeping its own value (#42)', () => {
+    const r = call('updateWithUniqueCheck', 'people', dir, { name: 'Bob' }, { email: 'bob@x', age: 30 }, ['email']);
+    assert.strictEqual(r.succ, true);
+    assert.strictEqual(rowsOf('people')[1].age, 30);
+});
+
+test('updateWithUniqueCheck refuses one value for several rows (#42)', () => {
+    const r = call('updateWithUniqueCheck', 'people', dir, { name: (n) => true }, { email: 'same@x' }, ['email']);
+    assert.strictEqual(r.succ, false);
+});
+
+// --- getRows (#50) ---------------------------------------------------------
+
+test('getRows matches every condition', () => {
+    freshTable('rows', [
+        { name: 'A', city: 'X', age: 20 },
+        { name: 'B', city: 'X', age: 40 },
+        { name: 'C', city: 'Y', age: 60 }
+    ]);
+    const r = call('getRows', 'rows', dir, { city: 'X', age: 40 });
+    assert.strictEqual(r.succ, true);
+    assert.deepStrictEqual(r.data.map((x) => x.name), ['B']);
+});
+
+test('getRows accepts a function as a condition (#50)', () => {
+    const r = call('getRows', 'rows', dir, { age: (age) => age >= 40 });
+    assert.deepStrictEqual(r.data.map((x) => x.name), ['B', 'C']);
+    const both = call('getRows', 'rows', dir, { age: (age) => age > 10, city: 'Y' });
+    assert.deepStrictEqual(both.data.map((x) => x.name), ['C']);
+});
+
+test('getRows reports an error thrown by a condition', () => {
+    const r = call('getRows', 'rows', dir, { age: () => { throw new Error('boom'); } });
+    assert.strictEqual(r.succ, false);
+    assert.ok(r.data.includes('boom'));
+});
+
+test('getRows refuses an empty or non-object WHERE', () => {
+    assert.strictEqual(call('getRows', 'rows', dir, {}).succ, false);
+    assert.strictEqual(call('getRows', 'rows', dir, 'x').succ, false);
+});
+
+// --- updateRow (#29) -------------------------------------------------------
+
+test('updateRow updates every matching row (#29)', () => {
+    freshTable('upd', [
+        { name: 'A', group: 1 },
+        { name: 'B', group: 1 },
+        { name: 'C', group: 1 },
+        { name: 'D', group: 2 }
+    ]);
+    const r = call('updateRow', 'upd', dir, { group: 1 }, { done: true });
+    assert.strictEqual(r.succ, true);
+    assert.strictEqual(r.extra, 3);
+    assert.deepStrictEqual(rowsOf('upd').map((x) => x.done === true), [true, true, true, false]);
+});
+
+test('updateRow needs all conditions to match (#29)', () => {
+    const r = call('updateRow', 'upd', dir, { name: 'D', group: 1 }, { done: true });
+    assert.strictEqual(r.succ, false);
+    assert.strictEqual(rowsOf('upd')[3].done, undefined);
+});
+
+test('updateRow refuses an empty WHERE', () => {
+    assert.strictEqual(call('updateRow', 'upd', dir, {}, { x: 1 }).succ, false);
+    assert.ok(rowsOf('upd').every((x) => x.x === undefined));
+});
+
+// --- deleteRow (#37, #39) --------------------------------------------------
+
+test('deleteRow removes only rows matching every condition (#37)', () => {
+    freshTable('files', [
+        { projectName: 'Project1', fileName: 'a.css' },
+        { projectName: 'Project2', fileName: 'delete.png' },
+        { projectName: 'Project1', fileName: 'delete.png' }
+    ]);
+    const r = call('deleteRow', 'files', dir, { fileName: 'delete.png', projectName: 'Project2' });
+    assert.strictEqual(r.succ, true);
+    assert.strictEqual(r.extra, 1);
+    assert.deepStrictEqual(rowsOf('files').map((x) => x.projectName + '/' + x.fileName),
+        ['Project1/a.css', 'Project1/delete.png']);
+});
+
+test('deleteRow removes several matching rows (#39)', () => {
+    const r = call('deleteRow', 'files', dir, { projectName: 'Project1' });
+    assert.strictEqual(r.extra, 2);
+    assert.deepStrictEqual(rowsOf('files'), []);
+});
+
+test('deleteRow accepts a function condition and reports no match', () => {
+    freshTable('del', [{ n: 1 }, { n: 2 }, { n: 3 }]);
+    assert.strictEqual(call('deleteRow', 'del', dir, { n: (n) => n > 1 }).extra, 2);
+    const none = call('deleteRow', 'del', dir, { n: 99 });
+    assert.strictEqual(none.succ, false);
+    assert.strictEqual(none.data, 'Row does not exist!');
+    assert.strictEqual(call('deleteRow', 'del', dir, {}).succ, false);
+});
+
+// --- the other functions ---------------------------------------------------
+
+test('getAll, count, getField, search, clearTable', () => {
+    freshTable('misc', [
+        { name: 'John John', tag: 'a.b' },
+        { name: 'Mary' },
+        { name: null, tag: 'x' }
+    ]);
+    assert.strictEqual(call('getAll', 'misc', dir).data.length, 3);
+    assert.strictEqual(call('count', 'misc', dir).data, 3);
+    assert.deepStrictEqual(call('getField', 'misc', dir, 'tag').data, ['a.b', 'x']);
+    assert.strictEqual(call('getField', 'misc', dir, 'nope').succ, false);
+
+    const found = call('search', 'misc', dir, 'name', 'OH');
+    assert.strictEqual(found.succ, true);
+    assert.deepStrictEqual(found.data.map((x) => x.name), ['John John']);
+    // The keyword is plain text, not a regular expression.
+    assert.deepStrictEqual(call('search', 'misc', dir, 'tag', '.').data.length, 1);
+
+    assert.strictEqual(call('clearTable', 'misc', dir).succ, true);
+    assert.strictEqual(call('count', 'misc', dir).data, 0);
+});
+
+test('functions report a missing table and wrong arguments', () => {
+    assert.strictEqual(call('getAll', 'missing', dir).succ, false);
+    assert.strictEqual(call('count', 'missing', dir).succ, false);
+    assert.strictEqual(call('clearTable', 'missing', dir).succ, false);
+    assert.strictEqual(call('getField', 'missing', dir, 'x').succ, false);
+    assert.strictEqual(call('getRows', 'missing', dir, { a: 1 }).succ, false);
+    const wrong = call('count', 'a', dir, 'b', 'c');
+    assert.strictEqual(wrong.succ, false);
+    assert.ok(wrong.data.includes('Wrong number of arguments'));
+});
+
+test('writes leave no temporary file behind', () => {
+    assert.ok(fs.readdirSync(dir).every((f) => !f.endsWith('.tmp')));
+});
+
+// --- run -------------------------------------------------------------------
+
+for (const t of tests) {
+    try {
+        t.fn();
+        console.log(`  pass  ${t.name}`);
+    } catch (e) {
+        failed++;
+        console.log(`  FAIL  ${t.name}\n        ${e.message}`);
+    }
+}
+
+fs.rmSync(dir, { recursive: true, force: true });
+console.log(`\n${tests.length - failed} passed, ${failed} failed`);
+process.exit(failed === 0 ? 0 : 1);

@@ -1,1209 +1,702 @@
-// const electron = require('electron');
 const path = require('path');
 const fs = require('fs');
-const os = require('os'); // Corrected: no 'new' for os module
+const os = require('os');
 
-let userData;
-
+// The default location is the app's folder in the OS user data directory,
+// named after the app's package.json (productName, then name).
+let pack = null;
 try {
-    const electron = require('electron');
-    // Attempt to get the app object. This might be electron.app or electron.remote.app
-    // depending on the context (main vs renderer) and Electron version.
-    // electron.remote is deprecated in newer versions.
-    // A more robust solution for renderers would be to use ipcRenderer to get path from main.
-    // For this library's general purpose, we try common patterns.
-    const app = electron.app || (electron.remote ? electron.remote.app : undefined);
-
-    if (!app || typeof app.getPath !== 'function') {
-        // This error will be caught by the main try...catch block
-        throw new Error("Electron app object or app.getPath method not available.");
-    }
-    userData = app.getPath('userData');
-    // Optional: create a subfolder within userData if desired, e.g.:
-    // userData = path.join(app.getPath('userData'), 'electron-db-data');
+    pack = require('../../package.json');
 } catch (e) {
-    // Log the error for debugging if needed, but console.warn is for user feedback.
-    // console.error("Electron-specific path retrieval failed:", e.message);
-    console.warn("electron-db: Electron module not found or Electron app object not available. Using OS-specific default path. For robust behavior, explicitly provide a storage location for your tables, or ensure Electron's 'app' module is accessible if running in an Electron environment.");
-
-    const defaultDirName = 'electron-db-data'; // Changed from 'electron-db-tables' for clarity
-    const homeDir = os.homedir();
-    const currentPlatform = os.platform(); // Renamed to avoid conflict with 'platform' variable if it existed from old code
-
-    if (currentPlatform === 'win32') {
-        // process.env.APPDATA is the roaming app data folder.
-        // process.env.LOCALAPPDATA would be for local app data, often preferred.
-        // However, to align with Electron's default userData behavior which is typically roaming:
-        userData = path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), defaultDirName);
-    } else if (currentPlatform === 'darwin') {
-        userData = path.join(homeDir, 'Library', 'Application Support', defaultDirName);
-    } else { // Linux and other POSIX-like
-        // Use ~/.config/app-name as per XDG Base Directory Specification
-        userData = path.join(homeDir, '.config', defaultDirName);
-    }
+    // Not installed inside an app; the app name stays empty.
 }
 
-/**
- * Create a table | a json file
- * The second argument is optional, if ommitted, the file
- * will be created at the default location.
- * @param  {[string]} arguments[0] [Table name]
- * @param {[string]} arguments[1] [Location of the database file] (Optional)
- * @param {[function]} arguments[2] [Callbak ]
- */
-// function createTable(tableName, callback) {
-// function createTable() {
-function createTable(tableName, locationOrCallback, callbackIfLocationProvided) {
-    let location;
-    let callback;
+const platform = os.platform();
 
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        // Determine the actual callback function to use for error reporting early.
-        let cb = null;
-        if (typeof locationOrCallback === 'function') cb = locationOrCallback;
-        else if (typeof callbackIfLocationProvided === 'function') cb = callbackIfLocationProvided;
-
-        if (typeof tableName !== 'string' || !tableName.trim()) {
-            if (cb) cb(new Error("Table name must be a non-empty string."));
-            return;
-        }
-    }
-
-    if (typeof locationOrCallback === 'string') {
-        location = locationOrCallback;
-        callback = callbackIfLocationProvided;
-        if (typeof callback !== 'function') {
-            // No reliable callback to notify, and this is a programming error.
-            // console.error("Error: createTable called with location but no valid callback.");
-            // For a library, throwing might be too disruptive. Silently returning is one option.
-            // Or, if a pseudo-callback was passed that's not a function, try to use it (already handled by initial cb check).
-            // This case means callbackIfLocationProvided was not a function.
-            return;
-        }
-    } else if (typeof locationOrCallback === 'function') {
-        location = userData; // Default location
-        callback = locationOrCallback;
-    } else {
-        // Invalid arguments if neither of the above.
-        // cb might have been identified if callbackIfLocationProvided was a function but locationOrCallback was not a string/function.
-        if (callbackIfLocationProvided && typeof callbackIfLocationProvided === 'function') { // Check if it was a function initially
-             callbackIfLocationProvided(new Error("Invalid arguments for createTable: Expected location string or callback function as second argument."));
-        } else if (locationOrCallback && typeof locationOrCallback === 'function') {
-             locationOrCallback(new Error("Invalid arguments for createTable: Expected callback function as third argument when location is provided."));
-        }
-        return;
-    }
-
-    // Final check for callback
-    if (typeof callback !== 'function') {
-        // This should ideally not be reached if logic above is correct.
-        // console.error("Error: createTable could not determine a valid callback function.");
-        return;
-    }
-
-    const fname = path.join(location, tableName + '.json');
-
-    // Ensure the directory exists first
-    fs.mkdir(location, { recursive: true }, (mkdirErr) => {
-        if (mkdirErr) {
-            callback(mkdirErr); // Propagate fs error
-            return;
-        }
-
-        // Check if the file with the tablename.json exists
-        fs.access(fname, fs.constants.F_OK, (accessErr) => {
-            if (accessErr === null) {
-                // File exists
-                callback(new Error(`Table '${tableName}' already exists at ${location}.`));
-                return;
-            } else if (accessErr.code === 'ENOENT') {
-                // File does not exist, proceed with creation
-                let obj = new Object();
-                obj[tableName] = [];
-
-                fs.writeFile(fname, JSON.stringify(obj, null, 2), (writeErr) => {
-                    if (writeErr) {
-                        callback(writeErr); // Propagate fs error
-                    } else {
-                        callback(null, `Table '${tableName}' created successfully at ${location}.`);
-                    }
-                });
-            } else {
-                // Other access error
-                callback(accessErr); // Propagate fs error
-            }
-        });
-    });
+let appName = '';
+if (pack !== null) {
+    appName = pack.productName ? pack.productName : pack.name;
 }
 
-/**
- * Checks if a json file contains valid JSON string
- */
-// function valid(dbName, location) {
-function valid(dbName, location, callback) {
-    if (typeof callback !== 'function') {
-        // console.error("Error: valid called without a valid callback function.");
-        return;
-    }
-    if (typeof dbName !== 'string' || !dbName.trim()) {
-        callback(new Error("DB name must be a non-empty string for valid()."));
-        return;
-    }
-    const dbPath = location || userData;
-    const fName = path.join(dbPath, dbName + '.json');
+let userData = '';
 
-    fs.readFile(fName, 'utf-8', (err, content) => {
-        if (err) {
-            if (err.code === 'ENOENT') { // File does not exist, so not valid in this context
-                callback(null, false);
-            } else { // Other fs error
-                callback(err);
-            }
-            return;
-        }
-        try {
-            JSON.parse(content);
-            callback(null, true); // Valid JSON
-        } catch (e_parse) {
-            // If it's a parse error, the file content is not valid JSON.
-            callback(null, false);
-        }
-    });
+if (platform === 'win32') {
+    userData = path.join(process.env.APPDATA || '', appName);
+} else if (platform === 'darwin') {
+    userData = path.join(process.env.HOME || os.homedir(), 'Library', 'Application Support', appName);
+} else {
+    userData = path.join('var', 'local', appName);
 }
 
-/**
- * Insert object to table. The object will be appended with the property, id
- * which uses timestamp as value.
- * There are 3 required arguments.
- * @param  {string} arguments[0]  [Table name]
- * @param  {string} arguments[1] [Location of the database file] (Optional)
- * @param  {string} arguments[2] [Row object]
- * @param  {Function} arguments[3] [Callback function]
- * @returns {(number|undefined)} [ID of the inserted row]
- */
-// function insertTableContent(tableName, tableRow, callback) {
-// function insertTableContent() {
-function insertTableContent(tableName, locationOrTableRow, tableRowOrCallback, callbackIfLocationProvided) {
-    let location;
-    let tableRow;
-    // Removed duplicate declarations of location and tableRow
-    let callback;
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-    // Try to identify the callback first for consistent error reporting
-    if (typeof callbackIfLocationProvided === 'function') {
-        callback = callbackIfLocationProvided;
-    } else if (typeof tableRowOrCallback === 'function' && (typeof locationOrTableRow === 'string' || typeof locationOrTableRow === 'object')) {
-        // If 3 args: (tableName, location/tableRow, callback)
-        // or 4 args: (tableName, location, tableRow, callback) - this case is caught by callbackIfLocationProvided being the callback
-        // This specifically targets the (tableName, tableRow, callback) scenario for tableRowOrCallback
-        if(typeof locationOrTableRow === 'object' && locationOrTableRow !== null) callback = tableRowOrCallback;
-    } else if (typeof locationOrTableRow === 'function'){
-         //This case implies (tableName, callback) which is not a valid signature for insert.
-         //but if it was the only function, it might be the callback.
-    }
-
-
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        if (callback && typeof callback === 'function') callback(new Error("Table name must be a non-empty string."));
-        else if (typeof locationOrTableRow === 'function') locationOrTableRow(new Error("Table name must be a non-empty string."));
-        else if (typeof tableRowOrCallback === 'function') tableRowOrCallback(new Error("Table name must be a non-empty string."));
-        return;
-    }
-
-    if (typeof locationOrTableRow === 'string') { // Location is provided: (tableName, location, tableRow, callback)
-        location = locationOrTableRow;
-        tableRow = tableRowOrCallback;
-        // callback is already callbackIfLocationProvided
-        if (typeof callback !== 'function') { /* console.error("Callback missing for insertTableContent with location"); */ return; }
-        if (typeof tableRow !== 'object' || tableRow === null) {
-            callback(new Error("tableRow must be an object when location is provided."));
-            return;
-        }
-    } else if (typeof locationOrTableRow === 'object' && locationOrTableRow !== null) { // Location is NOT provided: (tableName, tableRow, callback)
-        location = userData;
-        tableRow = locationOrTableRow;
-        callback = tableRowOrCallback; // This is the callback
-        if (typeof callback !== 'function') { /* console.error("Callback missing for insertTableContent"); */ return; }
-    } else {
-        const msg = "Invalid arguments for insertTableContent. Expected (tableName, [location], tableRow, callback).";
-        if (callback && typeof callback === 'function') callback(new Error(msg));
-        // Attempt to call other potential callbacks if the main one isn't a function yet.
-        else if (typeof tableRowOrCallback === 'function') tableRowOrCallback(new Error(msg + " Check tableRow."));
-        else if (typeof locationOrTableRow === 'function') locationOrTableRow(new Error(msg + " Check location or tableRow."));
-        return;
-    }
-
-    // Final validation of callback and tableRow
-    if (typeof callback !== 'function') { /* console.error("Unable to determine callback for insertTableContent"); */ return; }
-    if (typeof tableRow !== 'object' || tableRow === null) { // This might be redundant if covered above but good for safety
-        callback(new Error("tableRow must be a valid object."));
-        return;
-    }
-
-    const fname = path.join(location, tableName + '.json');
-
-    fs.mkdir(location, { recursive: true }, (mkdirErr) => {
-        if (mkdirErr) {
-            callback(mkdirErr);
-            return;
-        }
-
-        fs.access(fname, fs.constants.F_OK, (accessErr) => {
-            if (accessErr) {
-                callback(new Error(`Table/json file '${fname}' doesn't exist or is not accessible.`));
-                return;
-            }
-
-            fs.readFile(fname, 'utf-8', (readErr, fileContent) => {
-                if (readErr) {
-                    callback(readErr);
-                    return;
-                }
-
-                let table;
-                try {
-                    table = JSON.parse(fileContent);
-                } catch (parseErr) {
-                    callback(parseErr);
-                    return;
-                }
-
-                if (!table[tableName] || !Array.isArray(table[tableName])) {
-                    table[tableName] = [];
-                }
-
-                let id;
-                if (!tableRow['id']) {
-                    let date = new Date();
-                    id = date.getTime();
-                    tableRow['id'] = id;
-                } else {
-                    id = tableRow['id'];
-                }
-
-                table[tableName].push(tableRow);
-
-                fs.writeFile(fname, JSON.stringify(table, null, 2), (writeErr) => {
-                    if (writeErr) {
-                        callback(writeErr);
-                    } else {
-                        callback(null, { message: "Object written successfully!", id: id });
-                    }
-                });
-            });
-        });
-    });
-}
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 /**
- * Get all contents of the table/json file object
- * @param  {string} arguments[0] [Table name]
- * @param  {string} arguments[1] [Location of the database file] (Optional)
- * @param  {Function} arguments[2]  [callback function]
+ * Split the arguments of a call into table name, file name, the middle
+ * parameters and the callback. `count` is the number of arguments the call
+ * takes without a location (table name and callback included); one more
+ * argument means the second one is the location.
  */
-// function getAll(tableName, callback) {
-// function getAll() {
-function getAll(tableName, locationOrCallback, callbackIfLocationProvided) {
-    let location;
-    // Removed duplicate declaration of location
-    let callback;
+function parseArgs(args, count) {
+    const list = Array.prototype.slice.call(args);
+    const tableName = list[0];
+    let location = userData;
+    let rest = list.slice(1);
 
-    // Argument parsing and callback identification
-    if (typeof locationOrCallback === 'string') {
-        location = locationOrCallback;
-        callback = callbackIfLocationProvided;
-        if (typeof callback !== 'function') { /* console.error("Callback missing for getAll with location"); */ return; }
-    } else if (typeof locationOrCallback === 'function') {
-        location = userData;
-        callback = locationOrCallback;
-    } else { // Invalid second argument type
-        if (typeof callbackIfLocationProvided === 'function') { // If 3rd arg is a func, maybe it was the intended cb
-            callbackIfLocationProvided(new Error("Invalid arguments for getAll: Second argument must be location (string) or callback (function)."));
-        } else if (typeof locationOrCallback === 'function') { //This should have been caught by the elseif above
-             locationOrCallback(new Error("Invalid arguments for getAll: Second argument must be location (string) or callback (function)."));
-        }
-        return;
+    if (list.length === count + 1) {
+        location = list[1];
+        rest = list.slice(2);
     }
 
-    if (typeof callback !== 'function') { /* console.error("Unable to determine callback for getAll"); */ return; }
+    const last = rest[rest.length - 1];
+    const callback = typeof last === 'function' ? last : () => {};
 
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        callback(new Error("Table name must be a non-empty string."));
-        return;
+    let error = null;
+    if (list.length !== count && list.length !== count + 1) {
+        error = `Wrong number of arguments. Expected ${count} or ${count + 1} arguments including the callback function.`;
+    } else if (typeof tableName !== 'string' || tableName.trim() === '') {
+        error = 'Table name must be a non-empty string.';
+    } else if (typeof location !== 'string') {
+        error = 'Location must be a string.';
     }
 
-    const fname = path.join(location, tableName + '.json');
-
-    fs.access(fname, fs.constants.F_OK, (accessErr) => {
-        if (accessErr) {
-            // Distinguish between ENOENT and other errors if necessary, or just propagate.
-            // For getAll, if file not found, it's a clear case of not being able to get the data.
-            callback(new Error(`Table file '${fname}' does not exist or is not accessible. ${accessErr.message}`));
-            return;
-        }
-
-        fs.readFile(fname, 'utf-8', (readErr, fileContent) => {
-            if (readErr) {
-                callback(readErr); // Propagate fs error
-                return;
-            }
-
-            try {
-                let table = JSON.parse(fileContent);
-                if (table && table.hasOwnProperty(tableName)) {
-                     callback(null, table[tableName]);
-                } else {
-                     callback(new Error(`Table '${tableName}' not found in file or file structure is invalid.`));
-                }
-            } catch (parseErr) {
-                callback(parseErr); // Propagate JSON parsing error
-            }
-        });
-    });
-}
-
-/**
- * Find rows of a given field/key.
- * @param  {string} arguments[0] Table name
- * @param  {string} arguments[1] Location of the database file (Optional)
- * @param  {string} arguments[2] They fey/field to retrieve.
- */
-// function getField() {
-function getField(tableName, locationOrKey, keyOrCallback, callbackIfLocationProvided) {
-    let location;
-    let key;
-    // Removed duplicate declarations of location and key
-    let callback;
-
-    // Identify callback first
-    if (typeof callbackIfLocationProvided === 'function') callback = callbackIfLocationProvided;
-    else if (typeof keyOrCallback === 'function' && typeof locationOrKey === 'string') callback = keyOrCallback; // (tableName, key, callback)
-    // else if (typeof locationOrKey === 'function') callback = locationOrKey; // This would be (tableName, callback), invalid signature
-
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        if (callback && typeof callback === 'function') callback(new Error("Table name must be a non-empty string."));
-        // Attempt to call other potential callbacks if main one not ID'd
-        else if (typeof locationOrKey === 'function') locationOrKey(new Error("Table name must be a non-empty string."));
-        else if (typeof keyOrCallback === 'function') keyOrCallback(new Error("Table name must be a non-empty string."));
-        return;
-    }
-
-    if (typeof locationOrKey === 'string') {
-        if (typeof keyOrCallback === 'string' && typeof callbackIfLocationProvided === 'function') { // (tableName, location, key, callback)
-            location = locationOrKey;
-            key = keyOrCallback;
-            callback = callbackIfLocationProvided; // already set
-        } else if (typeof keyOrCallback === 'function') { // (tableName, key, callback)
-            location = userData;
-            key = locationOrKey;
-            callback = keyOrCallback; // already set
-        } else { // Invalid combination like (tableName, string, string, not_a_function)
-            if (callback && typeof callback === 'function') callback(new Error("Invalid arguments for getField: Check key and callback parameters."));
-            else if (typeof callbackIfLocationProvided === 'function') callbackIfLocationProvided(new Error("Invalid arguments for getField."));
-            else if (typeof keyOrCallback === 'function') keyOrCallback(new Error("Invalid arguments for getField."));
-            return;
-        }
-    } else { // locationOrKey is not a string, implies invalid arguments
-         if (callback && typeof callback === 'function') callback(new Error("Invalid arguments for getField: Second argument must be location (string) or key (string)."));
-         else if (typeof keyOrCallback === 'function') keyOrCallback(new Error("Invalid arguments for getField: Second argument must be location (string) or key (string)."));
-         else if (typeof locationOrKey === 'function') locationOrKey(new Error("Invalid arguments for getField: Second argument must be location (string) or key (string)."));
-        return;
-    }
-
-    if (typeof callback !== 'function') { /* console.error("Unable to determine callback for getField"); */ return; }
-    if (typeof key !== 'string' || !key.trim()) {
-        callback(new Error("Key must be a non-empty string."));
-        return;
-    }
-
-    const fname = path.join(location, tableName + '.json');
-
-    fs.access(fname, fs.constants.F_OK, (accessErr) => {
-        if (accessErr) {
-            callback(new Error(`The table file '${fname}' does not exist or is not accessible. ${accessErr.message}`));
-            return;
-        }
-
-        fs.readFile(fname, 'utf-8', (readErr, fileContent) => {
-            if (readErr) {
-                callback(readErr);
-                return;
-            }
-
-            try {
-                let table = JSON.parse(fileContent);
-                if (!table || !table.hasOwnProperty(tableName) || !Array.isArray(table[tableName])) {
-                     callback(new Error(`Table '${tableName}' not found or is invalid in file.`));
-                     return;
-                }
-                const rows = table[tableName];
-                let data = [];
-                let hasMatch = false;
-
-                for (let i = 0; i < rows.length; i++) {
-                    if (rows[i] && rows[i].hasOwnProperty(key)) {
-                        data.push(rows[i][key]);
-                        hasMatch = true;
-                    }
-                }
-
-                if (!hasMatch) {
-                    callback(new Error(`The key/field '${key}' does not exist in any row of table '${tableName}'.`));
-                } else {
-                    callback(null, data);
-                }
-            } catch (parseErr) {
-                callback(parseErr);
-            }
-        });
-    });
-}
-
-/**
- * Clears an existing table leaving an empty list in the json file.
- * @param  {string} arguments[0] [Table name]
- * @param  {string} arguments[1] [Location of the database file] (Optional)
- * @param  {Function} arguments[2]  [callback function]
- */
-// function clearTable() {
-function clearTable(tableName, locationOrCallback, callbackIfLocationProvided) {
-    let location;
-    // Removed duplicate declaration of location
-    let callback;
-
-    // Argument parsing and callback identification
-    if (typeof locationOrCallback === 'string') {
-        location = locationOrCallback;
-        callback = callbackIfLocationProvided;
-        if (typeof callback !== 'function') { /* console.error("Callback missing for clearTable with location"); */ return; }
-    } else if (typeof locationOrCallback === 'function') {
-        location = userData;
-        callback = locationOrCallback;
-    } else {
-        if (typeof callbackIfLocationProvided === 'function') {
-             callbackIfLocationProvided(new Error("Invalid arguments for clearTable: Second argument must be location (string) or callback (function)."));
-        } else if (typeof locationOrCallback === 'function') { // Should be caught by above
-            locationOrCallback(new Error("Invalid arguments for clearTable: Second argument must be location (string) or callback (function)."));
-        }
-        return;
-    }
-
-    if (typeof callback !== 'function') { /* console.error("Unable to determine callback for clearTable"); */ return; }
-
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        callback(new Error("Table name must be a non-empty string."));
-        return;
-    }
-
-    const fname = path.join(location, tableName + '.json');
-
-    fs.mkdir(location, { recursive: true }, (mkdirErr) => {
-        if (mkdirErr) {
-            callback(mkdirErr);
-            return;
-        }
-
-        fs.access(fname, fs.constants.F_OK, (accessErr) => {
-            if (accessErr) {
-                callback(new Error(`The table file '${fname}' you are trying to clear does not exist or is not accessible. ${accessErr.message}`));
-                return;
-            }
-
-            let obj = new Object();
-            obj[tableName] = [];
-
-            fs.writeFile(fname, JSON.stringify(obj, null, 2), (writeErr) => {
-                if (writeErr) {
-                    callback(writeErr);
-                } else {
-                    callback(null, `Table '${tableName}' cleared successfully at ${location}.`);
-                }
-            });
-        });
-    });
-}
-
-/**
- * Count the number of rows for a given table.
- * @param {string} FirstArgument Table name
- * @param {string} SecondArgument Location of the database file (Optional)
- * @param {callback} ThirdArgument Function callback
- */
-// function count() {
-function count(tableName, locationOrCallback, callbackIfLocationProvided) {
-    let location;
-    let callback;
-
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        if (typeof locationOrCallback === 'function') locationOrCallback(false, "Table name must be a non-empty string.");
-        else if (typeof callbackIfLocationProvided === 'function') callbackIfLocationProvided(false, "Table name must be a non-empty string.");
-        return;
-    }
-
-    // count(tableName, callback)
-    // count(tableName, location, callback)
-    if (typeof locationOrCallback === 'string') { // location provided
-        location = locationOrCallback;
-        callback = callbackIfLocationProvided;
-        if (typeof callback !== 'function') { /* console.error("Callback missing for count with location"); */ return; }
-    } else if (typeof locationOrCallback === 'function') { // location not provided
-        // location = userData; // userData will be handled by getAll if location is not passed
-        callback = locationOrCallback;
-    } else {
-        if (typeof callbackIfLocationProvided === 'function') {
-            callbackIfLocationProvided(new Error('Invalid arguments for count. Second argument must be location (string) or callback (function).'));
-        } else if (typeof locationOrCallback === 'function'){ // Should be caught above
-             locationOrCallback(new Error('Invalid arguments for count. Second argument must be location (string) or callback (function).'));
-        }
-        return;
-    }
-
-    if (typeof callback !== 'function') { /* console.error("Unable to determine callback for count"); */ return; }
-
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        callback(new Error("Table name must be a non-empty string."));
-        return;
-    }
-
-    const getAllCallback = (err, data) => {
-        if (err) {
-            // If err is already an Error object from getAll, just pass it.
-            // If it was a string message (legacy), wrap it.
-            // Based on current getAll refactor, it should be an Error object.
-            callback(err);
-        } else {
-            callback(null, data.length);
-        }
+    return {
+        tableName,
+        location,
+        fname: error ? '' : path.join(location, tableName + '.json'),
+        params: rest.slice(0, -1),
+        callback,
+        error
     };
-
-    if (typeof location === 'string') { // location was determined to be a string
-        getAll(tableName, location, getAllCallback);
-    } else { // location was not provided (or determined to be userData by default path in prior logic)
-        getAll(tableName, getAllCallback); // Calls getAll(tableName, callback) version
-    }
 }
 
 /**
- * Get row or rows that matched the given condition(s) in WHERE argument
- * @param {string} FirstArgument Table name
- * @param {string} SecondArgument Location of the database file (Optional)
- * @param {object} ThirdArgument Collection of conditions to be met
- ```
- {
-      key1: value1,
-      key2: value2,
-      ...
- }
- ```
- * @param {callback} FourthArgument Function callback
+ * Read a table file. Returns { table, rows } or { error }.
  */
-// function getRows() {
-function getRows(tableName, locationOrWhere, whereOrCallback, callbackIfLocationProvided) {
-    let location;
-    let where;
-    // Removed duplicate declarations of location and where
-    let callback;
-
-    // Identify callback
-    if(typeof callbackIfLocationProvided === 'function') callback = callbackIfLocationProvided;
-    else if(typeof whereOrCallback === 'function' && (typeof locationOrWhere === 'string' || typeof locationOrWhere === 'object')) callback = whereOrCallback;
-    // else if (typeof locationOrWhere === 'function') // invalid signature
-
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        if (callback && typeof callback === 'function') callback(new Error("Table name must be a non-empty string."));
-        else if(typeof locationOrWhere === 'function') locationOrWhere(new Error("Table name must be a non-empty string."));
-        else if(typeof whereOrCallback === 'function') whereOrCallback(new Error("Table name must be a non-empty string."));
-        return;
+function loadTable(fname, tableName) {
+    if (!fs.existsSync(fname)) {
+        return { error: 'Table file does not exist!' };
     }
 
-    if (typeof locationOrWhere === 'string') {
-        location = locationOrWhere;
-        where = whereOrCallback;
-        // callback = callbackIfLocationProvided; // already set
-    } else if (typeof locationOrWhere === 'object' && locationOrWhere !== null) {
-        location = userData;
-        where = locationOrWhere;
-        // callback = whereOrCallback; // already set
-    } else {
-        const msg = "Invalid arguments for getRows: Second argument must be location (string) or where (object).";
-        if (callback && typeof callback === 'function') callback(new Error(msg));
-        else if (typeof whereOrCallback === 'function') whereOrCallback(new Error(msg));
-        else if (typeof locationOrWhere === 'function') locationOrWhere(new Error(msg));
-        return;
+    let table;
+    try {
+        table = JSON.parse(fs.readFileSync(fname, 'utf-8'));
+    } catch (e) {
+        return { error: 'Table file is not valid JSON. ' + e.toString() };
     }
 
-    if (typeof callback !== 'function') { /* console.error("Unable to determine callback for getRows"); */ return; }
-    if (typeof where !== 'object' || where === null) {
-        callback(new Error("WHERE clause must be an object."));
-        return;
+    if (table === null || typeof table !== 'object' || !Array.isArray(table[tableName])) {
+        return { error: `Table '${tableName}' was not found in its json file.` };
     }
 
-    const whereKeys = Object.keys(where);
-    if (whereKeys.length === 0) {
-        callback(new Error("There are no conditions passed to the WHERE clause."));
-        return;
+    return { table, rows: table[tableName] };
+}
+
+/**
+ * Write a table file. The data goes to a temporary file first and is then
+ * renamed over the table, so a crash mid-write cannot leave broken JSON.
+ */
+function saveTable(fname, table) {
+    const tmp = fname + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(table, null, 2));
+    fs.renameSync(tmp, fname);
+}
+
+/**
+ * Check a WHERE clause. Returns an error message or null.
+ */
+function checkWhere(where) {
+    if (Object.prototype.toString.call(where) !== '[object Object]') {
+        return 'WHERE clause should be an object.';
     }
+    if (Object.keys(where).length === 0) {
+        return 'There are no conditions passed to the WHERE clause.';
+    }
+    return null;
+}
 
-    const fname = path.join(location, tableName + '.json');
-
-    fs.access(fname, fs.constants.F_OK, (accessErr) => {
-        if (accessErr) {
-            callback(new Error(`Table file '${fname}' does not exist or is not accessible. ${accessErr.message}`));
-            return;
+/**
+ * True when a row meets every condition of the WHERE clause. A condition is
+ * either a value, which must equal the row's value, or a function, which gets
+ * the row's value (and the whole row) and returns true to accept it.
+ */
+function matches(row, where) {
+    if (row === null || typeof row !== 'object') {
+        return false;
+    }
+    return Object.keys(where).every((key) => {
+        const condition = where[key];
+        if (typeof condition === 'function') {
+            return Boolean(condition(row[key], row));
         }
-
-        fs.readFile(fname, 'utf-8', (readErr, fileContent) => {
-            if (readErr) {
-                callback(readErr);
-                return;
-            }
-
-            try {
-                let table = JSON.parse(fileContent);
-                if (!table || !table.hasOwnProperty(tableName) || !Array.isArray(table[tableName])) {
-                    callback(new Error(`Table '${tableName}' not found or is invalid in file.`));
-                    return;
-                }
-                const rows = table[tableName];
-                let objs = [];
-
-                for (let i = 0; i < rows.length; i++) {
-                    let matchedCount = 0;
-                    if(rows[i]){
-                        for (let j = 0; j < whereKeys.length; j++) {
-                            const currentKey = whereKeys[j];
-                            if (rows[i].hasOwnProperty(currentKey) && rows[i][currentKey] === where[currentKey]) {
-                                matchedCount++;
-                            }
-                        }
-                    }
-                    if (matchedCount === whereKeys.length) {
-                        objs.push(rows[i]);
-                    }
-                }
-                callback(null, objs);
-            } catch (parseErr) {
-                callback(parseErr);
-            }
-        });
+        return hasOwn(row, key) && row[key] === condition;
     });
 }
 
 /**
- * Update a row or record which satisfies the where clause
- * @param  {[string]} arguments[0] [Table name]
- * @param {string} arguments[1] [Location of the database file] (Optional)
- * @param  {[object]} arguments[2]     [Objet for WHERE clause]
- * @param  {[object]} arguments[3]       [Object for SET clause]
- * @param  {Function} arguments[4]  [Callback function]
+ * A timestamp id that no row in `usedIds` has yet. Inserts within the same
+ * millisecond get the next free number instead of a duplicate.
  */
-// function updateRow(tableName, where, set, callback) {
-// function updateRow() {
-function updateRow(tableName, locationOrWhere, whereOrSet, setOrCallback, callbackIfLocationProvided) {
-    let location;
-    let where;
-    let set;
-    // Removed duplicate declarations of location, where, and set
-    let callback;
-
-    // Identify callback
-    if(typeof callbackIfLocationProvided === 'function') callback = callbackIfLocationProvided;
-    else if(typeof setOrCallback === 'function' && (typeof whereOrSet === 'object' || typeof whereOrSet === 'string') && typeof locationOrWhere === 'object') callback = setOrCallback; // (tableName, where, set, callback)
-    // More complex cases for callback identification might be needed if signatures are very flexible
-
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        if(callback && typeof callback === 'function') callback(new Error("Table name must be a non-empty string."));
-        // ... attempt other potential callbacks ...
-        else if (typeof locationOrWhere === 'function') locationOrWhere(new Error("Table name must be a non-empty string."));
-        return;
+function newId(usedIds) {
+    let id = Date.now();
+    while (usedIds.has(id)) {
+        id++;
     }
+    usedIds.add(id);
+    return id;
+}
 
-    if (typeof locationOrWhere === 'string') {
-        location = locationOrWhere;
-        where = whereOrSet;
-        set = setOrCallback;
-        // callback = callbackIfLocationProvided; // already set
-    } else if (typeof locationOrWhere === 'object' && locationOrWhere !== null) {
-        location = userData;
-        where = locationOrWhere;
-        set = whereOrSet;
-        callback = setOrCallback;
-    } else {
-        const msg = "Invalid arguments for updateRow: Check location, where, or set parameters.";
-        if (callback && typeof callback === 'function') callback(new Error(msg));
-        // ... attempt other potential callbacks ...
-        return;
-    }
+function idsOf(rows) {
+    return new Set(rows.filter((row) => row && hasOwn(row, 'id')).map((row) => row.id));
+}
 
-    if (typeof callback !== 'function') { /* console.error("Unable to determine callback for updateRow"); */ return; }
-    if (typeof where !== 'object' || where === null) {
-        callback(new Error("WHERE clause must be an object."));
-        return;
-    }
-    const whereKeys = Object.keys(where); // Define whereKeys early for the check
-    if (whereKeys.length === 0) {
-        callback(new Error("Aborting update: WHERE clause is empty. Updating all rows is not permitted by this function."));
-        return;
-    }
-    if (typeof set !== 'object' || set === null) {
-        callback(new Error("SET clause must be an object."));
-        return;
-    }
-
-    const fname = path.join(location, tableName + '.json');
-
-    fs.mkdir(location, { recursive: true }, (mkdirErr) => {
-        if (mkdirErr) {
-            callback(mkdirErr);
-            return;
-        }
-
-        fs.access(fname, fs.constants.F_OK, (accessErr) => {
-            if (accessErr) {
-                callback(new Error(`Table file '${fname}' does not exist or is not accessible. ${accessErr.message}`));
-                return;
-            }
-
-            fs.readFile(fname, 'utf-8', (readErr, fileContent) => {
-                if (readErr) {
-                    callback(readErr);
-                    return;
-                }
-
-                let table;
-                try {
-                    table = JSON.parse(fileContent);
-                } catch (parseErr) {
-                    callback(parseErr);
-                    return;
-                }
-
-                if (!table || !table.hasOwnProperty(tableName) || !Array.isArray(table[tableName])) {
-                    callback(new Error(`Table '${tableName}' not found or is invalid in file.`));
-                    return;
-                }
-
-                let rows = table[tableName];
-                // const whereKeys = Object.keys(where); // Moved up
-                const setKeys = Object.keys(set);
-                let recordsUpdatedCount = 0;
-
-                rows.forEach(row => {
-                    if (!row) return; // Skip if row is null or undefined
-
-                    let allConditionsMet = true;
-                    for (const key of whereKeys) {
-                        if (!row.hasOwnProperty(key) || row[key] !== where[key]) {
-                            allConditionsMet = false;
-                            break;
-                        }
-                    }
-
-                    if (allConditionsMet) {
-                        for (const keyToSet of setKeys) {
-                            row[keyToSet] = set[keyToSet];
-                        }
-                        recordsUpdatedCount++;
-                    }
-                });
-
-                if (recordsUpdatedCount > 0) {
-                    table[tableName] = rows;
-                    fs.writeFile(fname, JSON.stringify(table, null, 2), (writeErr) => {
-                        if (writeErr) {
-                            callback(writeErr);
-                        } else {
-                            callback(null, { message: `Successfully updated ${recordsUpdatedCount} row(s) in table '${tableName}'.`, count: recordsUpdatedCount });
-                        }
-                    });
-                } else {
-                    // No rows matched the criteria, so no file write needed.
-                    callback(null, { message: `No rows matched the criteria in table '${tableName}'. Nothing updated.`, count: 0 });
-                }
-            });
-        });
-    });
+function isRow(value) {
+    return Object.prototype.toString.call(value) === '[object Object]';
 }
 
 /**
- * Searching function
- * @param {string} arguments[0] Name of the table to search for
- * @param {string} arguments[1] [Location of the database file] (Optional)
- * @param {string} arguments[2] Name of the column/key to match
- * @param {object} arguments[3] The part of the value of the key that is being lookup
- * @param {function} arguments[4] Callback function
+ * Normalise the unique field list: a string or an array of strings.
+ * Returns an array, or null when invalid.
  */
-// function search(tableName, field, keyword, callback) {
-// function search() {
-function search(tableName, locationOrField, fieldOrKeyword, keywordOrCallback, callbackIfLocationProvided) {
-    let location;
-    let field;
-    let keyword;
-    // Removed duplicate declarations of location, field, and keyword
-    let callback;
-
-    // Identify callback
-    if(typeof callbackIfLocationProvided === 'function') callback = callbackIfLocationProvided;
-    else if(typeof keywordOrCallback === 'function') { // Covers (tableName, field, keyword, callback) and (tableName, location, field, callback) - needs more check
-        if(typeof fieldOrKeyword === 'string' && typeof locationOrField === 'string') callback = keywordOrCallback; // (tableName, location, field, callback)
-        else if (typeof fieldOrKeyword !== 'function' && typeof locationOrField === 'string') callback = keywordOrCallback; // (tableName, field, keyword, callback)
+function uniqueFieldList(uniqueKeys) {
+    const list = typeof uniqueKeys === 'string' ? [uniqueKeys] : uniqueKeys;
+    if (!Array.isArray(list) || list.length === 0 || !list.every((k) => typeof k === 'string')) {
+        return null;
     }
+    return list;
+}
 
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        if(callback && typeof callback === 'function') callback(new Error("Table name must be a non-empty string."));
-        // ... other attempts
+/**
+ * The first unique field whose value in `candidate` is already used by a row
+ * of `rows`, skipping the rows in `ignore`. Null when there is no clash.
+ */
+function findDuplicate(rows, candidate, uniqueKeys, ignore) {
+    for (const key of uniqueKeys) {
+        if (!hasOwn(candidate, key)) {
+            continue;
+        }
+        const clash = rows.some((row) =>
+            row && !ignore.has(row) && hasOwn(row, key) && row[key] === candidate[key]);
+        if (clash) {
+            return key;
+        }
+    }
+    return null;
+}
+
+function uniqueViolation(key) {
+    return `UNIQUE constraint violation: another row already has this value for '${key}'.`;
+}
+
+// ---------------------------------------------------------------------------
+// Public functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a table (a json file holding an empty list).
+ *
+ * createTable(tableName, [location], callback)
+ * @param {string}   tableName  Name of the table and of its json file.
+ * @param {string}   [location] Folder for the json file. Created if missing.
+ * @param {Function} callback   (succ, msg)
+ */
+function createTable() {
+    const { tableName, location, fname, callback, error } = parseArgs(arguments, 2);
+    if (error) {
+        callback(false, error);
         return;
     }
 
-    if (typeof locationOrField === 'string') {
-        if (typeof fieldOrKeyword === 'string' && typeof keywordOrCallback !== 'function' && typeof callbackIfLocationProvided === 'function') { // (tableName, location, field, keyword, callback)
-            location = locationOrField;
-            field = fieldOrKeyword;
-            keyword = keywordOrCallback;
-            // callback = callbackIfLocationProvided; // already set
-        } else if (typeof fieldOrKeyword !== 'function' && typeof keywordOrCallback === 'function') { // (tableName, field, keyword, callback)
-            location = userData;
-            field = locationOrField;
-            keyword = fieldOrKeyword;
-            callback = keywordOrCallback;
+    if (fs.existsSync(fname)) {
+        callback(false, tableName + '.json already exists!');
+        return;
+    }
+
+    try {
+        fs.mkdirSync(location, { recursive: true });
+        const obj = {};
+        obj[tableName] = [];
+        saveTable(fname, obj);
+        callback(true, 'Success!');
+    } catch (e) {
+        callback(false, e.toString());
+    }
+}
+
+/**
+ * Check that a table file exists and holds valid JSON.
+ *
+ * valid(tableName, [location])
+ * @param  {string}  tableName
+ * @param  {string}  [location]
+ * @return {boolean} true when the file exists and parses.
+ */
+function valid(tableName, location) {
+    const fname = path.join(location || userData, tableName + '.json');
+    try {
+        JSON.parse(fs.readFileSync(fname, 'utf-8'));
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Check whether a table file exists.
+ *
+ * tableExists(tableName, [location])
+ * @param  {string}  tableName
+ * @param  {string}  [location]
+ * @return {boolean}
+ */
+function tableExists(tableName, location) {
+    return fs.existsSync(path.join(location || userData, tableName + '.json'));
+}
+
+/**
+ * Insert a row. A row without an `id` gets a timestamp id, which is also
+ * written onto the object passed in.
+ *
+ * insertTableContent(tableName, [location], row, callback)
+ * @param  {string}   tableName
+ * @param  {string}   [location]
+ * @param  {Object}   row
+ * @param  {Function} callback  (succ, msg, id)
+ * @return {(number|undefined)} id of the inserted row, undefined on failure.
+ */
+function insertTableContent() {
+    const { tableName, fname, params, callback, error } = parseArgs(arguments, 3);
+    return insertRows(tableName, fname, [params[0]], null, callback, error, false);
+}
+
+/**
+ * Insert a row, refusing it when one of the unique fields already holds the
+ * same value in another row (like a UNIQUE constraint in SQL).
+ *
+ * insertWithUniqueCheck(tableName, [location], row, uniqueFields, callback)
+ * @param  {string}          tableName
+ * @param  {string}          [location]
+ * @param  {Object}          row
+ * @param  {string|string[]} uniqueFields  Field or fields that must be unique.
+ * @param  {Function}        callback      (succ, msg, id)
+ * @return {(number|undefined)} id of the inserted row, undefined on failure.
+ */
+function insertWithUniqueCheck() {
+    const { tableName, fname, params, callback, error } = parseArgs(arguments, 4);
+    return insertRows(tableName, fname, [params[0]], params[1], callback, error, false);
+}
+
+/**
+ * Insert several rows with one write.
+ *
+ * insertTableContents(tableName, [location], rows, callback)
+ * @param  {string}   tableName
+ * @param  {string}   [location]
+ * @param  {Object[]} rows
+ * @param  {Function} callback  (succ, msg, ids)
+ * @return {(number[]|undefined)} ids of the inserted rows, undefined on failure.
+ */
+function insertTableContents() {
+    const { tableName, fname, params, callback, error } = parseArgs(arguments, 3);
+    const rows = params[0];
+    if (!error && (!Array.isArray(rows) || rows.length === 0)) {
+        callback(false, 'Rows must be a non-empty array of objects.');
+        return undefined;
+    }
+    return insertRows(tableName, fname, rows, null, callback, error, true);
+}
+
+function insertRows(tableName, fname, newRows, uniqueKeys, callback, error, many) {
+    if (error) {
+        callback(false, error);
+        return undefined;
+    }
+    if (!newRows.every(isRow)) {
+        callback(false, many ? 'All rows must be objects.' : 'Row must be an object.');
+        return undefined;
+    }
+
+    let unique = null;
+    if (uniqueKeys !== null) {
+        unique = uniqueFieldList(uniqueKeys);
+        if (unique === null) {
+            callback(false, 'Unique fields must be a field name or an array of field names.');
+            return undefined;
+        }
+    }
+
+    const loaded = loadTable(fname, tableName);
+    if (loaded.error) {
+        callback(false, loaded.error);
+        return undefined;
+    }
+
+    if (unique !== null) {
+        const key = findDuplicate(loaded.rows, newRows[0], unique, new Set());
+        if (key !== null) {
+            callback(false, uniqueViolation(key));
+            return undefined;
+        }
+    }
+
+    const used = idsOf(loaded.rows);
+    const ids = newRows.map((row) => {
+        if (row.id === undefined || row.id === null) {
+            row.id = newId(used);
         } else {
-            const msg = "Invalid arguments for search: Structure doesn't match expected (tableName, [location], field, keyword, callback).";
-            if (callback && typeof callback === 'function') callback(new Error(msg));
-            // ... other attempts
-            return;
+            used.add(row.id);
         }
-    } else {
-        const msg = "Invalid arguments for search: Second argument (location or field) must be a string.";
-        if (callback && typeof callback === 'function') callback(new Error(msg));
-         // ... other attempts
-        return;
-    }
-
-    if (typeof callback !== 'function') { /* console.error("Unable to determine callback for search"); */ return; }
-    if (typeof field !== 'string' || !field.trim()) {
-        callback(new Error("Field must be a non-empty string."));
-        return;
-    }
-    // Keyword can be any type, will be converted to string for search.
-
-    const fname = path.join(location, tableName + '.json');
-
-    fs.access(fname, fs.constants.F_OK, (accessErr) => {
-        if (accessErr) {
-            callback(new Error(`Table file '${fname}' does not exist or is not accessible. ${accessErr.message}`));
-            return;
-        }
-
-        fs.readFile(fname, 'utf-8', (readErr, fileContent) => {
-            if (readErr) {
-                callback(readErr);
-                return;
-            }
-
-            try {
-                let table = JSON.parse(fileContent);
-                if (!table || !table.hasOwnProperty(tableName) || !Array.isArray(table[tableName])) {
-                    callback(new Error(`Table '${tableName}' not found or is invalid in file.`));
-                    return;
-                }
-                const rows = table[tableName];
-                let foundRows = [];
-                let fieldMissingInRow = false;
-
-                if (rows.length > 0) {
-                    for (let i = 0; i < rows.length; i++) {
-                        if (rows[i] && rows[i].hasOwnProperty(field)) {
-                            const value = String(rows[i][field]).toLowerCase();
-                            const searchKeyword = String(keyword).toLowerCase();
-                            if (value.includes(searchKeyword)) {
-                                foundRows.push(rows[i]);
-                            }
-                        } else {
-                            // Field is missing in at least one row.
-                            fieldMissingInRow = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (fieldMissingInRow) {
-                    callback(new Error(`Field '${field}' not found in one or more rows during search in table '${tableName}'.`));
-                } else {
-                    callback(null, foundRows);
-                }
-
-            } catch (parseErr) {
-                callback(parseErr);
-            }
-        });
+        return row.id;
     });
+
+    loaded.rows.push(...newRows);
+
+    try {
+        saveTable(fname, loaded.table);
+    } catch (e) {
+        callback(false, 'Error writing object. ' + e.toString());
+        return undefined;
+    }
+
+    if (many) {
+        callback(true, 'Objects written successfully!', ids);
+        return ids;
+    }
+    callback(true, 'Object written successfully!', ids[0]);
+    return ids[0];
 }
 
 /**
- * Delete a row specified.
- * @param {*} tableName 
- * @param {string} arguments[1] [Location of the database file] (Optional)
- * @param {*} where 
- * @param {*} callback 
+ * Get all rows of a table.
+ *
+ * getAll(tableName, [location], callback)
+ * @param {string}   tableName
+ * @param {string}   [location]
+ * @param {Function} callback  (succ, rows) — on failure, rows is a message.
  */
-// function deleteRow(tableName, where, callback) {
-// function deleteRow() {
-function deleteRow(tableName, locationOrWhere, whereOrCallback, callbackIfLocationProvided) {
-    let location;
-    let where;
-    // Removed duplicate declarations of location and where
-    let callback;
-
-    // Identify callback
-    if(typeof callbackIfLocationProvided === 'function') callback = callbackIfLocationProvided;
-    else if(typeof whereOrCallback === 'function' && (typeof locationOrWhere === 'string' || typeof locationOrWhere === 'object')) callback = whereOrCallback;
-
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        if(callback && typeof callback === 'function') callback(new Error("Table name must be a non-empty string."));
-        // ... other attempts
+function getAll() {
+    const { tableName, fname, callback, error } = parseArgs(arguments, 2);
+    if (error) {
+        callback(false, error);
         return;
     }
 
-    if (typeof locationOrWhere === 'string') {
-        location = locationOrWhere;
-        where = whereOrCallback;
-        // callback = callbackIfLocationProvided; // already set
-    } else if (typeof locationOrWhere === 'object' && locationOrWhere !== null) {
-        location = userData;
-        where = locationOrWhere;
-        // callback = whereOrCallback; // already set
-    } else {
-        const msg = "Invalid arguments for deleteRow: Second argument must be location (string) or where (object).";
-        if(callback && typeof callback === 'function') callback(new Error(msg));
-         // ... other attempts
+    const loaded = loadTable(fname, tableName);
+    if (loaded.error) {
+        callback(false, loaded.error);
+        return;
+    }
+    callback(true, loaded.rows);
+}
+
+/**
+ * Get the rows that meet every condition of the WHERE clause.
+ *
+ * getRows(tableName, [location], where, callback)
+ * @param {string}   tableName
+ * @param {string}   [location]
+ * @param {Object}   where     { field: value } pairs; a value may be a
+ *                             function (value, row) => boolean.
+ * @param {Function} callback  (succ, rows)
+ */
+function getRows() {
+    const { tableName, fname, params, callback, error } = parseArgs(arguments, 3);
+    const where = params[0];
+    const problem = error || checkWhere(where);
+    if (problem) {
+        callback(false, problem);
         return;
     }
 
-    if (typeof callback !== 'function') { /* console.error("Unable to determine callback for deleteRow"); */ return; }
-    if (typeof where !== 'object' || where === null) {
-        callback(new Error("WHERE clause must be an object."));
-        return;
-    }
-    if (Object.keys(where).length === 0) { // Prevent deleting all rows if where is {}
-        callback(new Error("WHERE clause cannot be empty for deleteRow operation. Provide conditions or use clearTable."));
+    const loaded = loadTable(fname, tableName);
+    if (loaded.error) {
+        callback(false, loaded.error);
         return;
     }
 
+    try {
+        callback(true, loaded.rows.filter((row) => matches(row, where)));
+    } catch (e) {
+        callback(false, e.toString());
+    }
+}
 
-    const fname = path.join(location, tableName + '.json');
+/**
+ * Update every row that meets the WHERE clause with the fields of SET.
+ *
+ * updateRow(tableName, [location], where, set, callback)
+ * @param {string}   tableName
+ * @param {string}   [location]
+ * @param {Object}   where     Conditions, as in getRows.
+ * @param {Object}   set       { field: newValue } pairs.
+ * @param {Function} callback  (succ, msg, count) — count of updated rows.
+ */
+function updateRow() {
+    const { tableName, fname, params, callback, error } = parseArgs(arguments, 4);
+    updateRows(tableName, fname, params[0], params[1], null, callback, error);
+}
 
-    fs.mkdir(location, { recursive: true }, (mkdirErr) => {
-        if (mkdirErr) {
-            callback(mkdirErr);
+/**
+ * updateRow that refuses the update when it would give a unique field a
+ * value another row already has, or the same value to several rows.
+ *
+ * updateWithUniqueCheck(tableName, [location], where, set, uniqueFields, callback)
+ * @param {string}          tableName
+ * @param {string}          [location]
+ * @param {Object}          where
+ * @param {Object}          set
+ * @param {string|string[]} uniqueFields
+ * @param {Function}        callback  (succ, msg, count)
+ */
+function updateWithUniqueCheck() {
+    const { tableName, fname, params, callback, error } = parseArgs(arguments, 5);
+    updateRows(tableName, fname, params[0], params[1], params[2], callback, error);
+}
+
+function updateRows(tableName, fname, where, set, uniqueKeys, callback, error) {
+    const problem = error || checkWhere(where) || (isRow(set) ? null : 'SET clause should be an object.');
+    if (problem) {
+        callback(false, problem);
+        return;
+    }
+
+    let unique = null;
+    if (uniqueKeys !== null) {
+        unique = uniqueFieldList(uniqueKeys);
+        if (unique === null) {
+            callback(false, 'Unique fields must be a field name or an array of field names.');
             return;
         }
+    }
 
-        fs.access(fname, fs.constants.F_OK, (accessErr) => {
-            if (accessErr) {
-                callback(new Error(`Table file '${fname}' does not exist or is not accessible. ${accessErr.message}`));
-                return;
-            }
+    const loaded = loadTable(fname, tableName);
+    if (loaded.error) {
+        callback(false, loaded.error);
+        return;
+    }
 
-            fs.readFile(fname, 'utf-8', (readErr, fileContent) => {
-                if (readErr) {
-                    callback(readErr);
-                    return;
-                }
+    let matched;
+    try {
+        matched = loaded.rows.filter((row) => matches(row, where));
+    } catch (e) {
+        callback(false, e.toString());
+        return;
+    }
 
-                let table;
-                try {
-                    table = JSON.parse(fileContent);
-                } catch (parseErr) {
-                    callback(parseErr);
-                    return;
-                }
+    if (matched.length === 0) {
+        callback(false, 'Cannot find the specified record.');
+        return;
+    }
 
-                if (!table || !table.hasOwnProperty(tableName) || !Array.isArray(table[tableName])) {
-                    callback(new Error(`Table '${tableName}' not found or is invalid in file.`));
-                    return;
-                }
+    if (unique !== null) {
+        const changed = unique.filter((key) => hasOwn(set, key));
+        if (changed.length > 0 && matched.length > 1) {
+            callback(false, uniqueViolation(changed[0]) + ' The update would give it to several rows.');
+            return;
+        }
+        const key = findDuplicate(loaded.rows, set, changed, new Set(matched));
+        if (key !== null) {
+            callback(false, uniqueViolation(key));
+            return;
+        }
+    }
 
-                let rows = table[tableName];
-                const whereKeys = Object.keys(where);
-                let originalRowCount = rows.length;
+    for (const row of matched) {
+        Object.assign(row, set);
+    }
 
-                const newRows = rows.filter(row => {
-                    if (!row) return true;
-                    for (const key of whereKeys) {
-                        if (!row.hasOwnProperty(key) || row[key] !== where[key]) {
-                            return true;
-                        }
-                    }
-                    return false;
-                });
-
-                if (newRows.length < originalRowCount) {
-                    table[tableName] = newRows;
-                    fs.writeFile(fname, JSON.stringify(table, null, 2), (writeErr) => {
-                        if (writeErr) {
-                            callback(writeErr);
-                        } else {
-                            const deletedCount = originalRowCount - newRows.length;
-                            callback(null, { message: `Successfully deleted ${deletedCount} row(s) from table '${tableName}'.`, count: deletedCount });
-                        }
-                    });
-                } else {
-                    // No rows matched the criteria, so no file write needed.
-                    callback(null, { message: `No rows matched the criteria in table '${tableName}'. Nothing deleted.`, count: 0 });
-                }
-            });
-        });
-    });
+    try {
+        saveTable(fname, loaded.table);
+        callback(true, 'Success!', matched.length);
+    } catch (e) {
+        callback(false, e.toString());
+    }
 }
 
 /**
- * Check table existence
- * @param {String} dbName - Table name
- * @param {String} dbLocation - Table location path
- * @return {Boolean} checking result
+ * Delete every row that meets the WHERE clause.
+ *
+ * deleteRow(tableName, [location], where, callback)
+ * @param {string}   tableName
+ * @param {string}   [location]
+ * @param {Object}   where     Conditions, as in getRows.
+ * @param {Function} callback  (succ, msg, count) — count of deleted rows.
  */
-// function tableExists() {
-// function tableExists(dbName, location) {
-function tableExists(dbName, location, callback) {
-    if (typeof callback !== 'function') {
-        // console.error("Error: tableExists called without a valid callback function.");
-        return; // Cannot proceed or report error without a callback
-    }
-    if (typeof dbName !== 'string' || !dbName.trim()) {
-        callback(new Error("DB name must be a non-empty string for tableExists()."));
+function deleteRow() {
+    const { tableName, fname, params, callback, error } = parseArgs(arguments, 3);
+    const where = params[0];
+    const problem = error || checkWhere(where);
+    if (problem) {
+        callback(false, problem);
         return;
     }
-    const dbPath = location || userData;
-    const fName = path.join(dbPath, dbName + '.json');
 
-    fs.access(fName, fs.constants.F_OK, (err) => {
-        if (err) {
-            if (err.code === 'ENOENT') { // File does not exist
-                callback(null, false);
-            } else { // Other error, like permission issue
-                callback(err);
-            }
-        } else { // File exists
-            callback(null, true);
-        }
-    });
+    const loaded = loadTable(fname, tableName);
+    if (loaded.error) {
+        callback(false, loaded.error);
+        return;
+    }
+
+    if (loaded.rows.length === 0) {
+        callback(false, 'Table is empty!');
+        return;
+    }
+
+    let kept;
+    try {
+        kept = loaded.rows.filter((row) => !matches(row, where));
+    } catch (e) {
+        callback(false, e.toString());
+        return;
+    }
+
+    const deleted = loaded.rows.length - kept.length;
+    if (deleted === 0) {
+        callback(false, 'Row does not exist!');
+        return;
+    }
+
+    loaded.table[tableName] = kept;
+    try {
+        saveTable(fname, loaded.table);
+        callback(true, 'Row(s) deleted successfully!', deleted);
+    } catch (e) {
+        callback(false, e.toString());
+    }
 }
-
 
 /**
- * Insert an array of objects into a table. Each object will be appended with an 'id' property
- * if it doesn't already have one. The 'id' uses a timestamp plus an index to ensure uniqueness within the batch.
- * @param {string} tableName - The name of the table.
- * @param {string} [locationOrRows] - Optional. The directory location of the table file OR the array of row objects if location is default.
- * @param {Array<Object>} [rowsOrCb] - The array of row objects to insert OR the callback function if location was provided.
- * @param {function} [callbackIfLocation] - The callback function if location and rows array were provided.
+ * Find rows whose field contains the keyword (case-insensitive). Rows
+ * without the field are skipped.
+ *
+ * search(tableName, [location], field, keyword, callback)
+ * @param {string}   tableName
+ * @param {string}   [location]
+ * @param {string}   field
+ * @param {*}        keyword   Compared as text.
+ * @param {Function} callback  (succ, rows)
  */
-function insertTableContents(tableName, locationOrRows, rowsOrCb, callbackIfLocation) {
-    let location;
-    let tableRowsArray;
-    let callback;
+function search() {
+    const { tableName, fname, params, callback, error } = parseArgs(arguments, 4);
+    if (error) {
+        callback(false, error);
+        return;
+    }
+    const field = params[0];
+    const keyword = String(params[1]).toLowerCase();
 
-    // Argument parsing
-    if (typeof locationOrRows === 'string') {
-        location = locationOrRows;
-        if (!Array.isArray(rowsOrCb)) { // rowsOrCb should be the array
-            if (typeof callbackIfLocation === 'function') {
-                return callbackIfLocation(new Error("Rows argument must be an array when location is specified."));
-            } else if (typeof rowsOrCb === 'function') { // Maybe rowsOrCb was intended as callback
-                 return rowsOrCb(new Error("Rows argument must be an array when location is specified."));
-            }
-            return; // No valid callback to report error
-        }
-        tableRowsArray = rowsOrCb;
-        callback = callbackIfLocation;
-    } else if (Array.isArray(locationOrRows)) {
-        location = userData;
-        tableRowsArray = locationOrRows;
-        callback = rowsOrCb;
-    } else {
-        // Attempt to find a callback for error reporting if arguments are wrong from the start
-        let potentialCb = callbackIfLocation || rowsOrCb || locationOrRows;
-        if (typeof potentialCb === 'function') {
-            potentialCb(new Error("Invalid arguments for insertTableContents. Expected (tableName, [location], rowsArray, callback)."));
-        }
+    const loaded = loadTable(fname, tableName);
+    if (loaded.error) {
+        callback(false, loaded.error);
         return;
     }
 
-    if (typeof callback !== 'function') {
-        // console.error("Callback function is not defined after parsing arguments for insertTableContents.");
-        return;
-    }
-
-    if (typeof tableName !== 'string' || !tableName.trim()) {
-        return callback(new Error("Table name must be a non-empty string."));
-    }
-    if (!Array.isArray(tableRowsArray) || tableRowsArray.length === 0) {
-        return callback(new Error("Input must be a non-empty array of objects."));
-    }
-    if (!tableRowsArray.every(item => typeof item === 'object' && item !== null)) {
-        return callback(new Error("All items in the input array must be objects."));
-    }
-
-    const fname = path.join(location, tableName + '.json');
-
-    fs.mkdir(location, { recursive: true }, (mkdirErr) => {
-        if (mkdirErr) {
-            return callback(mkdirErr);
-        }
-
-        fs.access(fname, fs.constants.F_OK, (accessErr) => {
-            if (accessErr) { // Assuming table must exist, like insertTableContent
-                return callback(new Error(`Table file '${fname}' does not exist or is not accessible. ${accessErr.message}`));
-            }
-
-            fs.readFile(fname, 'utf-8', (readErr, fileContent) => {
-                if (readErr) {
-                    return callback(readErr);
-                }
-
-                let table;
-                try {
-                    table = JSON.parse(fileContent);
-                } catch (parseErr) {
-                    return callback(parseErr);
-                }
-
-                if (!table[tableName] || !Array.isArray(table[tableName])) {
-                    return callback(new Error(`Table '${tableName}' structure is invalid or not found in file.`));
-                }
-
-                const insertedIds = [];
-                const baseTimestamp = new Date().getTime();
-
-                tableRowsArray.forEach((row, index) => {
-                    let currentId = row.id;
-                    if (currentId === undefined || currentId === null || String(currentId).trim() === "") {
-                        currentId = `${baseTimestamp}-${index}`;
-                        row.id = currentId;
-                    }
-                    table[tableName].push(row); // Add to existing table data
-                    insertedIds.push(currentId);
-                });
-
-                fs.writeFile(fname, JSON.stringify(table, null, 2), (writeErr) => {
-                    if (writeErr) {
-                        return callback(writeErr);
-                    }
-                    callback(null, { message: `Successfully inserted ${insertedIds.length} object(s) into table '${tableName}'.`, ids: insertedIds });
-                });
-            });
-        });
-    });
+    const found = loaded.rows.filter((row) =>
+        row && hasOwn(row, field) && row[field] !== null && row[field] !== undefined &&
+        String(row[field]).toLowerCase().includes(keyword));
+    callback(true, found);
 }
 
+/**
+ * Get the values of one field from every row that has it.
+ *
+ * getField(tableName, [location], field, callback)
+ * @param {string}   tableName
+ * @param {string}   [location]
+ * @param {string}   field
+ * @param {Function} callback  (succ, values)
+ */
+function getField() {
+    const { tableName, fname, params, callback, error } = parseArgs(arguments, 3);
+    if (error) {
+        callback(false, error);
+        return;
+    }
+    const key = params[0];
 
-// Export the public available functions
+    if (!fs.existsSync(fname)) {
+        callback(false, 'The table you are trying to access does not exist.');
+        return;
+    }
+    const loaded = loadTable(fname, tableName);
+    if (loaded.error) {
+        callback(false, loaded.error);
+        return;
+    }
+
+    const rows = loaded.rows.filter((row) => row && hasOwn(row, key));
+    if (rows.length === 0) {
+        callback(false, 'The key/field given does not exist.');
+        return;
+    }
+    callback(true, rows.map((row) => row[key]));
+}
+
+/**
+ * Remove every row, leaving an empty table.
+ *
+ * clearTable(tableName, [location], callback)
+ * @param {string}   tableName
+ * @param {string}   [location]
+ * @param {Function} callback  (succ, msg)
+ */
+function clearTable() {
+    const { tableName, fname, callback, error } = parseArgs(arguments, 2);
+    if (error) {
+        callback(false, error);
+        return;
+    }
+
+    if (!fs.existsSync(fname)) {
+        callback(false, 'The table you are trying to clear does not exist.');
+        return;
+    }
+
+    try {
+        const obj = {};
+        obj[tableName] = [];
+        saveTable(fname, obj);
+        callback(true, 'Table cleared successfully!');
+    } catch (e) {
+        callback(false, e.toString());
+    }
+}
+
+/**
+ * Count the rows of a table.
+ *
+ * count(tableName, [location], callback)
+ * @param {string}   tableName
+ * @param {string}   [location]
+ * @param {Function} callback  (succ, count)
+ */
+function count() {
+    const { tableName, fname, callback, error } = parseArgs(arguments, 2);
+    if (error) {
+        callback(false, error);
+        return;
+    }
+
+    const loaded = loadTable(fname, tableName);
+    if (loaded.error) {
+        callback(false, loaded.error);
+        return;
+    }
+    callback(true, loaded.rows.length);
+}
+
 module.exports = {
     createTable,
     insertTableContent,
+    insertTableContents,
+    insertWithUniqueCheck,
     getAll,
     getRows,
     updateRow,
+    updateWithUniqueCheck,
     search,
     deleteRow,
     valid,
@@ -1211,6 +704,5 @@ module.exports = {
     getField,
     count,
     tableExists,
-    _getInternals: () => ({ userData }), // Added for testing
-    insertTableContents // Added new function
+    _getInternals: () => ({ userData }) // For tests
 };
