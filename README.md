@@ -23,7 +23,7 @@ The table format contained in the `table_name.json` should be in the form of
 }
 ```
 
-**Important:** When no location is given, tables are stored in the app's folder inside the OS user data directory (for example `C:\Users\[username]\AppData\Roaming\[app name]` on Windows and `~/Library/Application Support/[app name]` on macOS). The folder name is the `productName` in your app's `package.json`, or its `name` when there is no `productName`.
+**Important:** When no location is given, tables are stored in the app's folder inside the OS user data directory (for example `C:\Users\[username]\AppData\Roaming\[app name]` on Windows and `~/Library/Application Support/[app name]` on macOS). On Linux the default is a `var/local/[app name]` folder relative to the directory the app was started from, so pass a location there (for example `app.getPath('userData')`). The folder name is the `productName` in your app's `package.json`, or its `name` when there is no `productName`.
 
 **Main process only:** electron-db reads and writes files with Node's `fs` module, so call it from Electron's main process (or a renderer with Node integration). Calling it from a renderer without Node integration fails with `fs.existsSync is not a function`; in that case, run the database calls in the main process and reach them through IPC.
 
@@ -129,7 +129,7 @@ if (db.valid('customers')) {
 ```
 
 ### For the database table at custom location
-For the implementation of this new feature, always put the location string as second argument for all the functions. (The directory string must end with appropriate slashes, forward slash for unix and back slash with escape string for Windows) (e.g. Windows: ```'C:\\databases\\'```, Unix: ```'/Users/<username>/Desktop/'```). For good practice, use the ```path.join``` method to let the OS apply its directory separator automatically.
+For the implementation of this new feature, always put the location string as second argument for all the functions (e.g. Windows: ```'C:\\databases'```, Unix: ```'/Users/<username>/Desktop'```). A trailing slash is optional. For good practice, use the ```path.join``` method to let the OS apply its directory separator automatically.
 
 ### **Inserting Multiple Objects/Data to Table**
 Insert several objects with one write. The callback gets the list of new ids.
@@ -204,12 +204,12 @@ db.getRows('customers', {
 ```
 
 ### **Conditions with Functions**
-A condition in a WHERE clause can be a function instead of a value. It receives the row's value for that field (and the whole row as the second argument) and returns `true` to accept the row. This works in `getRows`, `updateRow` and `deleteRow`.
+A condition in a WHERE clause can be a function instead of a value. It receives the row's value for that field (and the whole row as the second argument) and returns `true` to accept the row. This works in `getRows`, `updateRow` and `deleteRow`. The function also runs for rows that lack the field (the value is then `undefined`), so guard against that when calling methods on the value.
 
 ```javascript
 db.getRows('customers', {
   age: (age) => age >= 18,
-  name: (name) => name.startsWith('A')
+  name: (name) => typeof name === 'string' && name.startsWith('A')
 }, (succ, result) => {
   console.log(result);
 });
