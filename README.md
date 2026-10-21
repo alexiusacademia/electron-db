@@ -43,6 +43,60 @@ Some functions pass a third argument with extra data; see the [API reference](#a
 
 All calls finish before they return, so the callback has already run when the function returns.
 
+### **Promises**
+Every function is also available in a promise form under `db.promises`. It takes the same arguments without the callback, resolves with the result, and rejects with an `Error`.
+
+```javascript
+const db = require('electron-db').promises;
+
+async function main() {
+  await db.createTable('customers');
+
+  const id = await db.insertTableContent('customers', { name: 'Alexius Academia' });
+  const adults = await db.getRows('customers', { age: (age) => age >= 18 });
+  const updated = await db.updateRow('customers', { id }, { address: 'Paco' }); // number of rows
+  const deleted = await db.deleteRow('customers', { id });                       // number of rows
+}
+```
+
+| Function | Resolves with |
+|---|---|
+| `createTable`, `clearTable` | nothing |
+| `insertTableContent`, `insertWithUniqueCheck` | the new id |
+| `insertTableContents` | the new ids |
+| `getAll`, `getRows`, `search` | rows |
+| `getField` | values |
+| `updateRow`, `updateWithUniqueCheck`, `deleteRow` | number of changed rows (0 when nothing matched) |
+| `count` | number of rows |
+| `valid`, `tableExists` | a boolean |
+
+A promise resolves once its change is saved to disk. Changes started in the same tick are saved together in one write, so start many changes at once rather than awaiting each one:
+
+```javascript
+// One file write for all 1000 rows
+await Promise.all(items.map((item) => db.insertTableContent('records', item)));
+```
+
+The callback and promise forms can be mixed; they share the same table data.
+
+### **Performance**
+A table is read from its file once and then kept in memory. Later calls only check whether the file changed on disk (for example, edited by another program) and read it again only then. Looking up rows by `id` uses an index, and returned rows are copies, so changing them does not change the table.
+
+Every change still rewrites the whole json file, which takes about 3 ms for 10,000 rows and 20 ms for 100,000 rows. Callback functions write once per call; promise functions write once for all the changes started in the same tick.
+
+Measured on an Apple M5 Pro with Node 24:
+
+| 100,000 rows (17 MB) | 0.15.x | 0.16.0 |
+|---|---|---|
+| `getRows` by `id` | 26 ms | 0.01 ms |
+| `getRows` by another field | 27 ms | 2 ms |
+| `count` | 26 ms | 0.01 ms |
+| `insertTableContent` (callback) | 54 ms | 22 ms |
+| `updateRow` / `deleteRow` by `id` (callback) | 48 ms | 21 ms |
+| 1000 inserts | 55 s (callbacks) | 22 ms (promises, `Promise.all`) |
+
+electron-db suits small and medium data sets: settings, lists, app records up to tens of thousands of rows. Every table you use stays in memory, and only one process should write to a table at a time. For large data or several processes writing at once, use a database such as SQLite (`better-sqlite3`).
+
 ### **Creating Table**
 Creates a json file `[table-name].json` inside the application `userData` folder.
 
@@ -357,5 +411,7 @@ db.valid('customers', dbLocation);    // true when it exists and holds valid JSO
 
 - `uniqueFields` is a field name or an array of field names. An update is refused when it would give a unique field a value another row has, or the same value to several rows.
 - On failure, `succ` is `false`, the second argument is a message, and insert functions return `undefined`.
+- Insert functions return the new id(s); `updateRow`, `updateWithUniqueCheck` and `deleteRow` return the number of changed rows.
+- Each function is also in `db.promises`, without the callback argument; see [Promises](#promises).
 
 For contributions, please see the `CONTRIBUTE.md` file. Thank you.

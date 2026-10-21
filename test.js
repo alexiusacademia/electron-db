@@ -262,22 +262,155 @@ test('functions report a missing table and wrong arguments', () => {
     assert.ok(wrong.data.includes('Wrong number of arguments'));
 });
 
+// --- cache ------------------------------------------------------------------
+
+test('changes made to the file by another program are picked up', () => {
+    freshTable('ext', [{ a: 1 }]);
+    assert.strictEqual(call('count', 'ext', dir).data, 1);
+    const file = path.join(dir, 'ext.json');
+    fs.writeFileSync(file, JSON.stringify({ ext: [{ a: 1 }, { a: 2 }, { a: 3 }] }));
+    assert.strictEqual(call('count', 'ext', dir).data, 3);
+    assert.deepStrictEqual(call('getRows', 'ext', dir, { a: 3 }).data, [{ a: 3 }]);
+});
+
+test('returned rows are copies of the stored rows', () => {
+    freshTable('copies', [{ id: 1, name: 'A' }]);
+    call('getAll', 'copies', dir).data[0].name = 'changed';
+    call('getRows', 'copies', dir, { id: 1 }).data[0].name = 'changed';
+    const row = { id: 2, name: 'B' };
+    call('insertTableContent', 'copies', dir, row);
+    row.name = 'changed';
+    assert.deepStrictEqual(call('getAll', 'copies', dir).data.map((r) => r.name), ['A', 'B']);
+});
+
+test('lookups by id stay right after updates and deletes', () => {
+    freshTable('ids', [{ id: 1, v: 'a' }, { id: 2, v: 'b' }, { id: 3, v: 'c' }]);
+    assert.strictEqual(call('getRows', 'ids', dir, { id: 2 }).data[0].v, 'b');
+    call('deleteRow', 'ids', dir, { id: 2 });
+    assert.deepStrictEqual(call('getRows', 'ids', dir, { id: 2 }).data, []);
+    call('updateRow', 'ids', dir, { id: 3 }, { id: 30 });
+    assert.deepStrictEqual(call('getRows', 'ids', dir, { id: 3 }).data, []);
+    assert.strictEqual(call('getRows', 'ids', dir, { id: 30 }).data[0].v, 'c');
+    assert.strictEqual(call('getRows', 'ids', dir, { id: 1, v: 'x' }).data.length, 0);
+    const added = call('insertTableContent', 'ids', dir, { v: 'd' });
+    assert.ok(added.extra > 30);
+    assert.strictEqual(call('getRows', 'ids', dir, { id: added.extra }).data[0].v, 'd');
+});
+
+test('clearTable repairs a broken table file', () => {
+    fs.writeFileSync(path.join(dir, 'repair.json'), '{ broken');
+    assert.strictEqual(call('getAll', 'repair', dir).succ, false);
+    assert.strictEqual(call('clearTable', 'repair', dir).succ, true);
+    assert.deepStrictEqual(call('getAll', 'repair', dir).data, []);
+});
+
+// --- promises ---------------------------------------------------------------
+
+const p = db.promises;
+
+test('promise functions resolve with their results', async () => {
+    await p.createTable('pr', dir);
+    const id = await p.insertTableContent('pr', dir, { name: 'A', n: 1 });
+    assert.strictEqual(typeof id, 'number');
+    const ids = await p.insertTableContents('pr', dir, [{ name: 'B', n: 2 }, { name: 'C', n: 3 }]);
+    assert.strictEqual(ids.length, 2);
+    assert.strictEqual((await p.getAll('pr', dir)).length, 3);
+    assert.deepStrictEqual((await p.getRows('pr', dir, { n: (n) => n > 1 })).map((r) => r.name), ['B', 'C']);
+    assert.strictEqual(await p.updateRow('pr', dir, { name: 'A' }, { n: 10 }), 1);
+    assert.deepStrictEqual((await p.search('pr', dir, 'name', 'b')).map((r) => r.name), ['B']);
+    assert.deepStrictEqual(await p.getField('pr', dir, 'n'), [10, 2, 3]);
+    assert.strictEqual(await p.deleteRow('pr', dir, { id }), 1);
+    assert.strictEqual(await p.count('pr', dir), 2);
+    assert.strictEqual(await p.valid('pr', dir), true);
+    assert.strictEqual(await p.tableExists('pr', dir), true);
+    await p.clearTable('pr', dir);
+    assert.strictEqual(await p.count('pr', dir), 0);
+    assert.deepStrictEqual(rowsOf('pr'), []);
+});
+
+test('promise changes are on disk once they resolve', async () => {
+    await p.createTable('disk', dir);
+    await p.insertTableContent('disk', dir, { a: 1 });
+    assert.strictEqual(rowsOf('disk').length, 1);
+    await p.updateRow('disk', dir, { a: 1 }, { a: 2 });
+    assert.strictEqual(rowsOf('disk')[0].a, 2);
+});
+
+test('promise update and delete resolve 0 when nothing matches', async () => {
+    await p.createTable('none', dir);
+    assert.strictEqual(await p.deleteRow('none', dir, { a: 1 }), 0);
+    await p.insertTableContent('none', dir, { a: 1 });
+    assert.strictEqual(await p.updateRow('none', dir, { a: 9 }, { b: 1 }), 0);
+    assert.strictEqual(await p.deleteRow('none', dir, { a: 9 }), 0);
+});
+
+test('promise functions reject with an Error', async () => {
+    await assert.rejects(p.getAll('missing', dir), /does not exist/);
+    await assert.rejects(p.createTable('none', dir), /already exists/);
+    await assert.rejects(p.getRows('none', dir, {}), /no conditions/);
+    await assert.rejects(p.insertWithUniqueCheck('none', dir, { a: 1 }, ['a']), /UNIQUE/);
+    await assert.rejects(p.count('a', dir, 'extra', 'args'), /Wrong number/);
+});
+
+test('promise changes in the same tick share one write', async () => {
+    await p.createTable('batch', dir);
+    const real = fs.writeFileSync;
+    let writes = 0;
+    fs.writeFileSync = function () {
+        writes++;
+        return real.apply(this, arguments);
+    };
+    try {
+        await Promise.all(Array.from({ length: 200 }, (_, i) => p.insertTableContent('batch', dir, { i })));
+    } finally {
+        fs.writeFileSync = real;
+    }
+    assert.strictEqual(writes, 1);
+    const rows = rowsOf('batch');
+    assert.strictEqual(rows.length, 200);
+    assert.strictEqual(new Set(rows.map((r) => r.id)).size, 200);
+});
+
+test('callback and promise calls see each other\'s changes', async () => {
+    await p.createTable('mixed', dir);
+    const pending = p.insertTableContent('mixed', dir, { from: 'promise' });
+    // Not awaited yet: the callback call still sees it and saves both.
+    call('insertTableContent', 'mixed', dir, { from: 'callback' });
+    assert.strictEqual(rowsOf('mixed').length, 2);
+    await pending;
+    assert.deepStrictEqual(rowsOf('mixed').map((r) => r.from), ['promise', 'callback']);
+});
+
+test('queued promise changes are saved when the process exits', () => {
+    const script = `
+        const db = require(${JSON.stringify(path.join(__dirname, 'index.js'))});
+        const dir = ${JSON.stringify(dir)};
+        db.createTable('exit', dir, () => {});
+        db.promises.insertTableContent('exit', dir, { saved: true });
+        process.exit(0);
+    `;
+    require('child_process').execFileSync(process.execPath, ['-e', script]);
+    assert.deepStrictEqual(rowsOf('exit').map((r) => r.saved), [true]);
+});
+
 test('writes leave no temporary file behind', () => {
     assert.ok(fs.readdirSync(dir).every((f) => !f.endsWith('.tmp')));
 });
 
 // --- run -------------------------------------------------------------------
 
-for (const t of tests) {
-    try {
-        t.fn();
-        console.log(`  pass  ${t.name}`);
-    } catch (e) {
-        failed++;
-        console.log(`  FAIL  ${t.name}\n        ${e.message}`);
+(async () => {
+    for (const t of tests) {
+        try {
+            await t.fn();
+            console.log(`  pass  ${t.name}`);
+        } catch (e) {
+            failed++;
+            console.log(`  FAIL  ${t.name}\n        ${e.message}`);
+        }
     }
-}
 
-fs.rmSync(dir, { recursive: true, force: true });
-console.log(`\n${tests.length - failed} passed, ${failed} failed`);
-process.exit(failed === 0 ? 0 : 1);
+    fs.rmSync(dir, { recursive: true, force: true });
+    console.log(`\n${tests.length - failed} passed, ${failed} failed`);
+    process.exit(failed === 0 ? 0 : 1);
+})();

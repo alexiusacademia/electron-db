@@ -28,11 +28,230 @@ if (platform === 'win32') {
     userData = path.join('var', 'local', appName);
 }
 
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+const noop = () => {};
+
 // ---------------------------------------------------------------------------
-// Helpers
+// Table cache
+//
+// A table is parsed once and kept in memory. Each call checks the file's
+// modification time and size, and reads it again only when another program
+// changed it. Callback functions write the file at once; promise functions
+// change the cached table and write it once per tick, so many changes in a
+// row cost one write.
 // ---------------------------------------------------------------------------
 
-const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+const tables = new Map(); // file name -> entry
+
+function makeEntry(fname, tableName, table) {
+    return {
+        fname,
+        tableName,
+        table,
+        mtimeMs: -1,
+        size: -1,
+        dirty: false,      // changed in memory, not yet written
+        scheduled: false,  // a promise write is queued
+        waiters: [],       // promise writes waiting for the next save
+        byId: null,        // id -> rows, built on first use
+        maxId: -Infinity   // largest numeric id, kept with byId
+    };
+}
+
+function rowsOf(entry) {
+    return entry.table[entry.tableName];
+}
+
+/**
+ * Get the cached table, reading the file when it is new or changed.
+ * Returns { entry } or { error }.
+ */
+function openTable(fname, tableName) {
+    const cached = tables.get(fname);
+    if (cached && cached.dirty) {
+        return { entry: cached };
+    }
+
+    let stat;
+    try {
+        stat = fs.statSync(fname);
+    } catch (e) {
+        tables.delete(fname);
+        return { error: 'Table file does not exist!' };
+    }
+
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+        return { entry: cached };
+    }
+
+    let table;
+    try {
+        table = JSON.parse(fs.readFileSync(fname, 'utf-8'));
+    } catch (e) {
+        tables.delete(fname);
+        return { error: 'Table file is not valid JSON. ' + e.toString() };
+    }
+
+    if (table === null || typeof table !== 'object' || !Array.isArray(table[tableName])) {
+        tables.delete(fname);
+        return { error: `Table '${tableName}' was not found in its json file.` };
+    }
+
+    const entry = makeEntry(fname, tableName, table);
+    entry.mtimeMs = stat.mtimeMs;
+    entry.size = stat.size;
+    tables.set(fname, entry);
+    return { entry };
+}
+
+/**
+ * Write a table. The data goes to a temporary file first and is then
+ * renamed over the table, so a crash mid-write cannot leave broken JSON.
+ */
+function writeEntry(entry) {
+    const tmp = entry.fname + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(entry.table, null, 2));
+    fs.renameSync(tmp, entry.fname);
+    const stat = fs.statSync(entry.fname);
+    entry.mtimeMs = stat.mtimeMs;
+    entry.size = stat.size;
+    entry.dirty = false;
+}
+
+/**
+ * Write a changed table now. Promise writes waiting on the same table are
+ * saved too. Returns an error message, or null.
+ */
+function saveNow(entry) {
+    const waiters = entry.waiters;
+    entry.waiters = [];
+    try {
+        writeEntry(entry);
+    } catch (e) {
+        // The file still holds the old data; drop the unsaved changes.
+        entry.dirty = false;
+        tables.delete(entry.fname);
+        waiters.forEach((w) => w.reject(e));
+        return e.toString();
+    }
+    waiters.forEach((w) => w.resolve());
+    return null;
+}
+
+/**
+ * Mark a table changed and write it at the end of the current tick.
+ * Resolves once the change is on disk.
+ */
+function saveSoon(entry) {
+    entry.dirty = true;
+    const done = new Promise((resolve, reject) => entry.waiters.push({ resolve, reject }));
+    if (!entry.scheduled) {
+        entry.scheduled = true;
+        setImmediate(() => {
+            entry.scheduled = false;
+            if (entry.dirty && tables.get(entry.fname) === entry) {
+                saveNow(entry);
+            }
+        });
+    }
+    return done;
+}
+
+// Save queued promise writes if the process exits before they run.
+process.on('exit', () => {
+    for (const entry of tables.values()) {
+        if (entry.dirty) {
+            try {
+                writeEntry(entry);
+            } catch (e) {
+                // Nothing more can be done while exiting.
+            }
+        }
+    }
+});
+
+// ---------------------------------------------------------------------------
+// id index
+// ---------------------------------------------------------------------------
+
+function idIndex(entry) {
+    if (entry.byId === null) {
+        const index = new Map();
+        let maxId = -Infinity;
+        for (const row of rowsOf(entry)) {
+            if (row && hasOwn(row, 'id')) {
+                if (typeof row.id === 'number' && row.id > maxId) {
+                    maxId = row.id;
+                }
+                const bucket = index.get(row.id);
+                if (bucket) {
+                    bucket.push(row);
+                } else {
+                    index.set(row.id, [row]);
+                }
+            }
+        }
+        entry.byId = index;
+        entry.maxId = maxId;
+    }
+    return entry.byId;
+}
+
+function indexAdd(entry, row) {
+    if (entry.byId !== null) {
+        if (typeof row.id === 'number' && row.id > entry.maxId) {
+            entry.maxId = row.id;
+        }
+        const bucket = entry.byId.get(row.id);
+        if (bucket) {
+            bucket.push(row);
+        } else {
+            entry.byId.set(row.id, [row]);
+        }
+    }
+}
+
+function indexRemove(entry, row) {
+    if (entry.byId !== null && row && hasOwn(row, 'id')) {
+        const bucket = entry.byId.get(row.id);
+        if (bucket) {
+            const left = bucket.filter((r) => r !== row);
+            if (left.length > 0) {
+                entry.byId.set(row.id, left);
+            } else {
+                entry.byId.delete(row.id);
+            }
+        }
+    }
+}
+
+/**
+ * The rows worth testing against a WHERE clause: the id index bucket when
+ * the clause names a plain id, otherwise every row.
+ */
+function candidates(entry, where) {
+    if (hasOwn(where, 'id') && typeof where.id !== 'function') {
+        return idIndex(entry).get(where.id) || [];
+    }
+    return rowsOf(entry);
+}
+
+/**
+ * A timestamp id that no row has yet. When the clock is not ahead of the
+ * largest id (several inserts in one millisecond), it is that id plus one.
+ */
+function newId(entry) {
+    const index = idIndex(entry);
+    let id = Math.max(Date.now(), entry.maxId + 1);
+    while (index.has(id)) {
+        id++;
+    }
+    return id;
+}
+
+// ---------------------------------------------------------------------------
+// Argument and value helpers
+// ---------------------------------------------------------------------------
 
 /**
  * Split the arguments of a call into table name, file name, the middle
@@ -52,7 +271,7 @@ function parseArgs(args, count) {
     }
 
     const last = rest[rest.length - 1];
-    const callback = typeof last === 'function' ? last : () => {};
+    const callback = typeof last === 'function' ? last : noop;
 
     let error = null;
     if (list.length !== count && list.length !== count + 1) {
@@ -73,41 +292,6 @@ function parseArgs(args, count) {
     };
 }
 
-/**
- * Read a table file. Returns { table, rows } or { error }.
- */
-function loadTable(fname, tableName) {
-    if (!fs.existsSync(fname)) {
-        return { error: 'Table file does not exist!' };
-    }
-
-    let table;
-    try {
-        table = JSON.parse(fs.readFileSync(fname, 'utf-8'));
-    } catch (e) {
-        return { error: 'Table file is not valid JSON. ' + e.toString() };
-    }
-
-    if (table === null || typeof table !== 'object' || !Array.isArray(table[tableName])) {
-        return { error: `Table '${tableName}' was not found in its json file.` };
-    }
-
-    return { table, rows: table[tableName] };
-}
-
-/**
- * Write a table file. The data goes to a temporary file first and is then
- * renamed over the table, so a crash mid-write cannot leave broken JSON.
- */
-function saveTable(fname, table) {
-    const tmp = fname + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(table, null, 2));
-    fs.renameSync(tmp, fname);
-}
-
-/**
- * Check a WHERE clause. Returns an error message or null.
- */
 function checkWhere(where) {
     if (Object.prototype.toString.call(where) !== '[object Object]') {
         return 'WHERE clause should be an object.';
@@ -136,31 +320,16 @@ function matches(row, where) {
     });
 }
 
-/**
- * A timestamp id that no row in `usedIds` has yet. Inserts within the same
- * millisecond get the next free number instead of a duplicate.
- */
-function newId(usedIds) {
-    let id = Date.now();
-    while (usedIds.has(id)) {
-        id++;
-    }
-    usedIds.add(id);
-    return id;
-}
-
-function idsOf(rows) {
-    return new Set(rows.filter((row) => row && hasOwn(row, 'id')).map((row) => row.id));
-}
-
 function isRow(value) {
     return Object.prototype.toString.call(value) === '[object Object]';
 }
 
-/**
- * Normalise the unique field list: a string or an array of strings.
- * Returns an array, or null when invalid.
- */
+// Rows handed to the caller are copies, so changing them does not change
+// the cached table.
+function copyRows(rows) {
+    return rows.map((row) => (row && typeof row === 'object' ? Object.assign({}, row) : row));
+}
+
 function uniqueFieldList(uniqueKeys) {
     const list = typeof uniqueKeys === 'string' ? [uniqueKeys] : uniqueKeys;
     if (!Array.isArray(list) || list.length === 0 || !list.every((k) => typeof k === 'string')) {
@@ -191,48 +360,346 @@ function uniqueViolation(key) {
     return `UNIQUE constraint violation: another row already has this value for '${key}'.`;
 }
 
+const BAD_UNIQUE = 'Unique fields must be a field name or an array of field names.';
+
+// ---------------------------------------------------------------------------
+// Operations
+//
+// Each operation works on the cached table and returns one of:
+//   { ok: true, msg, extra, value, entry }  entry is set when the table changed
+//   { ok: false, msg }                      failure
+//   { ok: false, msg, empty }               nothing matched; promises resolve `empty`
+// `msg` and `extra` go to callbacks; `value` is what promises resolve with.
+// ---------------------------------------------------------------------------
+
+function fail(msg) {
+    return { ok: false, msg };
+}
+
+function opCreateTable(a) {
+    if (fs.existsSync(a.fname)) {
+        return fail(a.tableName + '.json already exists!');
+    }
+    try {
+        fs.mkdirSync(a.location, { recursive: true });
+        const table = {};
+        table[a.tableName] = [];
+        tables.delete(a.fname);
+        const entry = makeEntry(a.fname, a.tableName, table);
+        writeEntry(entry);
+        tables.set(a.fname, entry);
+        return { ok: true, msg: 'Success!', value: undefined };
+    } catch (e) {
+        return fail(e.toString());
+    }
+}
+
+function insertRows(a, newRows, uniqueKeys, many) {
+    if (!newRows.every(isRow)) {
+        return fail(many ? 'All rows must be objects.' : 'Row must be an object.');
+    }
+
+    let unique = null;
+    if (uniqueKeys !== null) {
+        unique = uniqueFieldList(uniqueKeys);
+        if (unique === null) {
+            return fail(BAD_UNIQUE);
+        }
+    }
+
+    const opened = openTable(a.fname, a.tableName);
+    if (opened.error) {
+        return fail(opened.error);
+    }
+    const entry = opened.entry;
+    const rows = rowsOf(entry);
+
+    if (unique !== null) {
+        const key = findDuplicate(rows, newRows[0], unique, new Set());
+        if (key !== null) {
+            return fail(uniqueViolation(key));
+        }
+    }
+
+    const ids = newRows.map((row) => {
+        // The id is also written onto the caller's object.
+        if (row.id === undefined || row.id === null) {
+            row.id = newId(entry);
+        }
+        const stored = Object.assign({}, row);
+        rows.push(stored);
+        indexAdd(entry, stored);
+        return row.id;
+    });
+
+    if (many) {
+        return { ok: true, msg: 'Objects written successfully!', extra: ids, value: ids, entry };
+    }
+    return { ok: true, msg: 'Object written successfully!', extra: ids[0], value: ids[0], entry };
+}
+
+function opInsert(a) {
+    return insertRows(a, [a.params[0]], null, false);
+}
+
+function opInsertUnique(a) {
+    return insertRows(a, [a.params[0]], a.params[1], false);
+}
+
+function opInsertMany(a) {
+    const rows = a.params[0];
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return fail('Rows must be a non-empty array of objects.');
+    }
+    return insertRows(a, rows, null, true);
+}
+
+function opGetAll(a) {
+    const opened = openTable(a.fname, a.tableName);
+    if (opened.error) {
+        return fail(opened.error);
+    }
+    const rows = copyRows(rowsOf(opened.entry));
+    return { ok: true, msg: rows, value: rows };
+}
+
+function opGetRows(a) {
+    const where = a.params[0];
+    const problem = checkWhere(where);
+    if (problem) {
+        return fail(problem);
+    }
+    const opened = openTable(a.fname, a.tableName);
+    if (opened.error) {
+        return fail(opened.error);
+    }
+    try {
+        const rows = copyRows(candidates(opened.entry, where).filter((row) => matches(row, where)));
+        return { ok: true, msg: rows, value: rows };
+    } catch (e) {
+        return fail(e.toString());
+    }
+}
+
+function updateRows(a, where, set, uniqueKeys) {
+    const problem = checkWhere(where) || (isRow(set) ? null : 'SET clause should be an object.');
+    if (problem) {
+        return fail(problem);
+    }
+
+    let unique = null;
+    if (uniqueKeys !== null) {
+        unique = uniqueFieldList(uniqueKeys);
+        if (unique === null) {
+            return fail(BAD_UNIQUE);
+        }
+    }
+
+    const opened = openTable(a.fname, a.tableName);
+    if (opened.error) {
+        return fail(opened.error);
+    }
+    const entry = opened.entry;
+
+    let matched;
+    try {
+        matched = candidates(entry, where).filter((row) => matches(row, where));
+    } catch (e) {
+        return fail(e.toString());
+    }
+
+    if (matched.length === 0) {
+        return { ok: false, msg: 'Cannot find the specified record.', empty: 0 };
+    }
+
+    if (unique !== null) {
+        const changed = unique.filter((key) => hasOwn(set, key));
+        if (changed.length > 0 && matched.length > 1) {
+            return fail(uniqueViolation(changed[0]) + ' The update would give it to several rows.');
+        }
+        const key = findDuplicate(rowsOf(entry), set, changed, new Set(matched));
+        if (key !== null) {
+            return fail(uniqueViolation(key));
+        }
+    }
+
+    for (const row of matched) {
+        Object.assign(row, set);
+    }
+    if (hasOwn(set, 'id')) {
+        entry.byId = null;
+    }
+
+    return { ok: true, msg: 'Success!', extra: matched.length, value: matched.length, entry };
+}
+
+function opUpdate(a) {
+    return updateRows(a, a.params[0], a.params[1], null);
+}
+
+function opUpdateUnique(a) {
+    return updateRows(a, a.params[0], a.params[1], a.params[2]);
+}
+
+function opDelete(a) {
+    const where = a.params[0];
+    const problem = checkWhere(where);
+    if (problem) {
+        return fail(problem);
+    }
+
+    const opened = openTable(a.fname, a.tableName);
+    if (opened.error) {
+        return fail(opened.error);
+    }
+    const entry = opened.entry;
+    const rows = rowsOf(entry);
+
+    if (rows.length === 0) {
+        return { ok: false, msg: 'Table is empty!', empty: 0 };
+    }
+
+    let doomed;
+    try {
+        doomed = candidates(entry, where).filter((row) => matches(row, where));
+    } catch (e) {
+        return fail(e.toString());
+    }
+
+    if (doomed.length === 0) {
+        return { ok: false, msg: 'Row does not exist!', empty: 0 };
+    }
+
+    const gone = new Set(doomed);
+    entry.table[entry.tableName] = rows.filter((row) => !gone.has(row));
+    doomed.forEach((row) => indexRemove(entry, row));
+
+    return { ok: true, msg: 'Row(s) deleted successfully!', extra: doomed.length, value: doomed.length, entry };
+}
+
+function opSearch(a) {
+    const field = a.params[0];
+    const keyword = String(a.params[1]).toLowerCase();
+    const opened = openTable(a.fname, a.tableName);
+    if (opened.error) {
+        return fail(opened.error);
+    }
+    const rows = copyRows(rowsOf(opened.entry).filter((row) =>
+        row && hasOwn(row, field) && row[field] !== null && row[field] !== undefined &&
+        String(row[field]).toLowerCase().includes(keyword)));
+    return { ok: true, msg: rows, value: rows };
+}
+
+function opGetField(a) {
+    const key = a.params[0];
+    if (!fs.existsSync(a.fname)) {
+        return fail('The table you are trying to access does not exist.');
+    }
+    const opened = openTable(a.fname, a.tableName);
+    if (opened.error) {
+        return fail(opened.error);
+    }
+    const rows = rowsOf(opened.entry).filter((row) => row && hasOwn(row, key));
+    if (rows.length === 0) {
+        return fail('The key/field given does not exist.');
+    }
+    const values = rows.map((row) => row[key]);
+    return { ok: true, msg: values, value: values };
+}
+
+function opClearTable(a) {
+    if (!fs.existsSync(a.fname)) {
+        return fail('The table you are trying to clear does not exist.');
+    }
+    // Works on a broken file too: clearing replaces its content.
+    let entry = tables.get(a.fname);
+    if (!entry) {
+        entry = makeEntry(a.fname, a.tableName, {});
+        tables.set(a.fname, entry);
+    }
+    entry.table = {};
+    entry.table[a.tableName] = [];
+    entry.byId = null;
+    return { ok: true, msg: 'Table cleared successfully!', value: undefined, entry };
+}
+
+function opCount(a) {
+    const opened = openTable(a.fname, a.tableName);
+    if (opened.error) {
+        return fail(opened.error);
+    }
+    const n = rowsOf(opened.entry).length;
+    return { ok: true, msg: n, value: n };
+}
+
+// ---------------------------------------------------------------------------
+// Callback and promise front ends
+// ---------------------------------------------------------------------------
+
+/**
+ * Callback form: (succ, msg[, extra]). Changes are written before the
+ * callback runs. Insert functions return the new id(s).
+ */
+function withCallback(op, count) {
+    return function () {
+        const a = parseArgs(arguments, count);
+        if (a.error) {
+            a.callback(false, a.error);
+            return undefined;
+        }
+        const r = op(a);
+        if (!r.ok) {
+            a.callback(false, r.msg);
+            return undefined;
+        }
+        if (r.entry) {
+            const error = saveNow(r.entry);
+            if (error !== null) {
+                a.callback(false, error);
+                return undefined;
+            }
+        }
+        if (r.extra === undefined) {
+            a.callback(true, r.msg);
+        } else {
+            a.callback(true, r.msg, r.extra);
+        }
+        return r.extra;
+    };
+}
+
+/**
+ * Promise form: same arguments without the callback. Resolves with the
+ * result once any change is on disk; rejects with an Error.
+ */
+function withPromise(op, count) {
+    return function () {
+        const args = Array.prototype.slice.call(arguments);
+        args.push(noop);
+        const a = parseArgs(args, count);
+        if (a.error) {
+            return Promise.reject(new Error(a.error));
+        }
+        let r;
+        try {
+            r = op(a);
+        } catch (e) {
+            return Promise.reject(e);
+        }
+        if (!r.ok) {
+            return hasOwn(r, 'empty') ? Promise.resolve(r.empty) : Promise.reject(new Error(r.msg));
+        }
+        return r.entry ? saveSoon(r.entry).then(() => r.value) : Promise.resolve(r.value);
+    };
+}
+
 // ---------------------------------------------------------------------------
 // Public functions
 // ---------------------------------------------------------------------------
 
 /**
- * Create a table (a json file holding an empty list).
- *
- * createTable(tableName, [location], callback)
- * @param {string}   tableName  Name of the table and of its json file.
- * @param {string}   [location] Folder for the json file. Created if missing.
- * @param {Function} callback   (succ, msg)
- */
-function createTable() {
-    const { tableName, location, fname, callback, error } = parseArgs(arguments, 2);
-    if (error) {
-        callback(false, error);
-        return;
-    }
-
-    if (fs.existsSync(fname)) {
-        callback(false, tableName + '.json already exists!');
-        return;
-    }
-
-    try {
-        fs.mkdirSync(location, { recursive: true });
-        const obj = {};
-        obj[tableName] = [];
-        saveTable(fname, obj);
-        callback(true, 'Success!');
-    } catch (e) {
-        callback(false, e.toString());
-    }
-}
-
-/**
  * Check that a table file exists and holds valid JSON.
- *
- * valid(tableName, [location])
- * @param  {string}  tableName
- * @param  {string}  [location]
- * @return {boolean} true when the file exists and parses.
+ * valid(tableName, [location]) -> boolean
  */
 function valid(tableName, location) {
     const fname = path.join(location || userData, tableName + '.json');
@@ -246,463 +713,58 @@ function valid(tableName, location) {
 
 /**
  * Check whether a table file exists.
- *
- * tableExists(tableName, [location])
- * @param  {string}  tableName
- * @param  {string}  [location]
- * @return {boolean}
+ * tableExists(tableName, [location]) -> boolean
  */
 function tableExists(tableName, location) {
     return fs.existsSync(path.join(location || userData, tableName + '.json'));
 }
 
-/**
- * Insert a row. A row without an `id` gets a timestamp id, which is also
- * written onto the object passed in.
- *
- * insertTableContent(tableName, [location], row, callback)
- * @param  {string}   tableName
- * @param  {string}   [location]
- * @param  {Object}   row
- * @param  {Function} callback  (succ, msg, id)
- * @return {(number|undefined)} id of the inserted row, undefined on failure.
- */
-function insertTableContent() {
-    const { tableName, fname, params, callback, error } = parseArgs(arguments, 3);
-    return insertRows(tableName, fname, [params[0]], null, callback, error, false);
-}
-
-/**
- * Insert a row, refusing it when one of the unique fields already holds the
- * same value in another row (like a UNIQUE constraint in SQL).
- *
- * insertWithUniqueCheck(tableName, [location], row, uniqueFields, callback)
- * @param  {string}          tableName
- * @param  {string}          [location]
- * @param  {Object}          row
- * @param  {string|string[]} uniqueFields  Field or fields that must be unique.
- * @param  {Function}        callback      (succ, msg, id)
- * @return {(number|undefined)} id of the inserted row, undefined on failure.
- */
-function insertWithUniqueCheck() {
-    const { tableName, fname, params, callback, error } = parseArgs(arguments, 4);
-    return insertRows(tableName, fname, [params[0]], params[1], callback, error, false);
-}
-
-/**
- * Insert several rows with one write.
- *
- * insertTableContents(tableName, [location], rows, callback)
- * @param  {string}   tableName
- * @param  {string}   [location]
- * @param  {Object[]} rows
- * @param  {Function} callback  (succ, msg, ids)
- * @return {(number[]|undefined)} ids of the inserted rows, undefined on failure.
- */
-function insertTableContents() {
-    const { tableName, fname, params, callback, error } = parseArgs(arguments, 3);
-    const rows = params[0];
-    if (!error && (!Array.isArray(rows) || rows.length === 0)) {
-        callback(false, 'Rows must be a non-empty array of objects.');
-        return undefined;
-    }
-    return insertRows(tableName, fname, rows, null, callback, error, true);
-}
-
-function insertRows(tableName, fname, newRows, uniqueKeys, callback, error, many) {
-    if (error) {
-        callback(false, error);
-        return undefined;
-    }
-    if (!newRows.every(isRow)) {
-        callback(false, many ? 'All rows must be objects.' : 'Row must be an object.');
-        return undefined;
-    }
-
-    let unique = null;
-    if (uniqueKeys !== null) {
-        unique = uniqueFieldList(uniqueKeys);
-        if (unique === null) {
-            callback(false, 'Unique fields must be a field name or an array of field names.');
-            return undefined;
-        }
-    }
-
-    const loaded = loadTable(fname, tableName);
-    if (loaded.error) {
-        callback(false, loaded.error);
-        return undefined;
-    }
-
-    if (unique !== null) {
-        const key = findDuplicate(loaded.rows, newRows[0], unique, new Set());
-        if (key !== null) {
-            callback(false, uniqueViolation(key));
-            return undefined;
-        }
-    }
-
-    const used = idsOf(loaded.rows);
-    const ids = newRows.map((row) => {
-        if (row.id === undefined || row.id === null) {
-            row.id = newId(used);
-        } else {
-            used.add(row.id);
-        }
-        return row.id;
-    });
-
-    loaded.rows.push(...newRows);
-
-    try {
-        saveTable(fname, loaded.table);
-    } catch (e) {
-        callback(false, 'Error writing object. ' + e.toString());
-        return undefined;
-    }
-
-    if (many) {
-        callback(true, 'Objects written successfully!', ids);
-        return ids;
-    }
-    callback(true, 'Object written successfully!', ids[0]);
-    return ids[0];
-}
-
-/**
- * Get all rows of a table.
- *
- * getAll(tableName, [location], callback)
- * @param {string}   tableName
- * @param {string}   [location]
- * @param {Function} callback  (succ, rows) — on failure, rows is a message.
- */
-function getAll() {
-    const { tableName, fname, callback, error } = parseArgs(arguments, 2);
-    if (error) {
-        callback(false, error);
-        return;
-    }
-
-    const loaded = loadTable(fname, tableName);
-    if (loaded.error) {
-        callback(false, loaded.error);
-        return;
-    }
-    callback(true, loaded.rows);
-}
-
-/**
- * Get the rows that meet every condition of the WHERE clause.
- *
- * getRows(tableName, [location], where, callback)
- * @param {string}   tableName
- * @param {string}   [location]
- * @param {Object}   where     { field: value } pairs; a value may be a
- *                             function (value, row) => boolean.
- * @param {Function} callback  (succ, rows)
- */
-function getRows() {
-    const { tableName, fname, params, callback, error } = parseArgs(arguments, 3);
-    const where = params[0];
-    const problem = error || checkWhere(where);
-    if (problem) {
-        callback(false, problem);
-        return;
-    }
-
-    const loaded = loadTable(fname, tableName);
-    if (loaded.error) {
-        callback(false, loaded.error);
-        return;
-    }
-
-    try {
-        callback(true, loaded.rows.filter((row) => matches(row, where)));
-    } catch (e) {
-        callback(false, e.toString());
-    }
-}
-
-/**
- * Update every row that meets the WHERE clause with the fields of SET.
- *
- * updateRow(tableName, [location], where, set, callback)
- * @param {string}   tableName
- * @param {string}   [location]
- * @param {Object}   where     Conditions, as in getRows.
- * @param {Object}   set       { field: newValue } pairs.
- * @param {Function} callback  (succ, msg, count) — count of updated rows.
- */
-function updateRow() {
-    const { tableName, fname, params, callback, error } = parseArgs(arguments, 4);
-    updateRows(tableName, fname, params[0], params[1], null, callback, error);
-}
-
-/**
- * updateRow that refuses the update when it would give a unique field a
- * value another row already has, or the same value to several rows.
- *
- * updateWithUniqueCheck(tableName, [location], where, set, uniqueFields, callback)
- * @param {string}          tableName
- * @param {string}          [location]
- * @param {Object}          where
- * @param {Object}          set
- * @param {string|string[]} uniqueFields
- * @param {Function}        callback  (succ, msg, count)
- */
-function updateWithUniqueCheck() {
-    const { tableName, fname, params, callback, error } = parseArgs(arguments, 5);
-    updateRows(tableName, fname, params[0], params[1], params[2], callback, error);
-}
-
-function updateRows(tableName, fname, where, set, uniqueKeys, callback, error) {
-    const problem = error || checkWhere(where) || (isRow(set) ? null : 'SET clause should be an object.');
-    if (problem) {
-        callback(false, problem);
-        return;
-    }
-
-    let unique = null;
-    if (uniqueKeys !== null) {
-        unique = uniqueFieldList(uniqueKeys);
-        if (unique === null) {
-            callback(false, 'Unique fields must be a field name or an array of field names.');
-            return;
-        }
-    }
-
-    const loaded = loadTable(fname, tableName);
-    if (loaded.error) {
-        callback(false, loaded.error);
-        return;
-    }
-
-    let matched;
-    try {
-        matched = loaded.rows.filter((row) => matches(row, where));
-    } catch (e) {
-        callback(false, e.toString());
-        return;
-    }
-
-    if (matched.length === 0) {
-        callback(false, 'Cannot find the specified record.');
-        return;
-    }
-
-    if (unique !== null) {
-        const changed = unique.filter((key) => hasOwn(set, key));
-        if (changed.length > 0 && matched.length > 1) {
-            callback(false, uniqueViolation(changed[0]) + ' The update would give it to several rows.');
-            return;
-        }
-        const key = findDuplicate(loaded.rows, set, changed, new Set(matched));
-        if (key !== null) {
-            callback(false, uniqueViolation(key));
-            return;
-        }
-    }
-
-    for (const row of matched) {
-        Object.assign(row, set);
-    }
-
-    try {
-        saveTable(fname, loaded.table);
-        callback(true, 'Success!', matched.length);
-    } catch (e) {
-        callback(false, e.toString());
-    }
-}
-
-/**
- * Delete every row that meets the WHERE clause.
- *
- * deleteRow(tableName, [location], where, callback)
- * @param {string}   tableName
- * @param {string}   [location]
- * @param {Object}   where     Conditions, as in getRows.
- * @param {Function} callback  (succ, msg, count) — count of deleted rows.
- */
-function deleteRow() {
-    const { tableName, fname, params, callback, error } = parseArgs(arguments, 3);
-    const where = params[0];
-    const problem = error || checkWhere(where);
-    if (problem) {
-        callback(false, problem);
-        return;
-    }
-
-    const loaded = loadTable(fname, tableName);
-    if (loaded.error) {
-        callback(false, loaded.error);
-        return;
-    }
-
-    if (loaded.rows.length === 0) {
-        callback(false, 'Table is empty!');
-        return;
-    }
-
-    let kept;
-    try {
-        kept = loaded.rows.filter((row) => !matches(row, where));
-    } catch (e) {
-        callback(false, e.toString());
-        return;
-    }
-
-    const deleted = loaded.rows.length - kept.length;
-    if (deleted === 0) {
-        callback(false, 'Row does not exist!');
-        return;
-    }
-
-    loaded.table[tableName] = kept;
-    try {
-        saveTable(fname, loaded.table);
-        callback(true, 'Row(s) deleted successfully!', deleted);
-    } catch (e) {
-        callback(false, e.toString());
-    }
-}
-
-/**
- * Find rows whose field contains the keyword (case-insensitive). Rows
- * without the field are skipped.
- *
- * search(tableName, [location], field, keyword, callback)
- * @param {string}   tableName
- * @param {string}   [location]
- * @param {string}   field
- * @param {*}        keyword   Compared as text.
- * @param {Function} callback  (succ, rows)
- */
-function search() {
-    const { tableName, fname, params, callback, error } = parseArgs(arguments, 4);
-    if (error) {
-        callback(false, error);
-        return;
-    }
-    const field = params[0];
-    const keyword = String(params[1]).toLowerCase();
-
-    const loaded = loadTable(fname, tableName);
-    if (loaded.error) {
-        callback(false, loaded.error);
-        return;
-    }
-
-    const found = loaded.rows.filter((row) =>
-        row && hasOwn(row, field) && row[field] !== null && row[field] !== undefined &&
-        String(row[field]).toLowerCase().includes(keyword));
-    callback(true, found);
-}
-
-/**
- * Get the values of one field from every row that has it.
- *
- * getField(tableName, [location], field, callback)
- * @param {string}   tableName
- * @param {string}   [location]
- * @param {string}   field
- * @param {Function} callback  (succ, values)
- */
-function getField() {
-    const { tableName, fname, params, callback, error } = parseArgs(arguments, 3);
-    if (error) {
-        callback(false, error);
-        return;
-    }
-    const key = params[0];
-
-    if (!fs.existsSync(fname)) {
-        callback(false, 'The table you are trying to access does not exist.');
-        return;
-    }
-    const loaded = loadTable(fname, tableName);
-    if (loaded.error) {
-        callback(false, loaded.error);
-        return;
-    }
-
-    const rows = loaded.rows.filter((row) => row && hasOwn(row, key));
-    if (rows.length === 0) {
-        callback(false, 'The key/field given does not exist.');
-        return;
-    }
-    callback(true, rows.map((row) => row[key]));
-}
-
-/**
- * Remove every row, leaving an empty table.
- *
- * clearTable(tableName, [location], callback)
- * @param {string}   tableName
- * @param {string}   [location]
- * @param {Function} callback  (succ, msg)
- */
-function clearTable() {
-    const { tableName, fname, callback, error } = parseArgs(arguments, 2);
-    if (error) {
-        callback(false, error);
-        return;
-    }
-
-    if (!fs.existsSync(fname)) {
-        callback(false, 'The table you are trying to clear does not exist.');
-        return;
-    }
-
-    try {
-        const obj = {};
-        obj[tableName] = [];
-        saveTable(fname, obj);
-        callback(true, 'Table cleared successfully!');
-    } catch (e) {
-        callback(false, e.toString());
-    }
-}
-
-/**
- * Count the rows of a table.
- *
- * count(tableName, [location], callback)
- * @param {string}   tableName
- * @param {string}   [location]
- * @param {Function} callback  (succ, count)
- */
-function count() {
-    const { tableName, fname, callback, error } = parseArgs(arguments, 2);
-    if (error) {
-        callback(false, error);
-        return;
-    }
-
-    const loaded = loadTable(fname, tableName);
-    if (loaded.error) {
-        callback(false, loaded.error);
-        return;
-    }
-    callback(true, loaded.rows.length);
-}
-
-module.exports = {
-    createTable,
-    insertTableContent,
-    insertTableContents,
-    insertWithUniqueCheck,
-    getAll,
-    getRows,
-    updateRow,
-    updateWithUniqueCheck,
-    search,
-    deleteRow,
-    valid,
-    clearTable,
-    getField,
-    count,
-    tableExists,
-    _getInternals: () => ({ userData }) // For tests
+// Argument counts without a location, table name and callback included.
+const operations = {
+    // createTable(tableName, [location], callback)            (succ, msg)
+    createTable: [opCreateTable, 2],
+    // insertTableContent(tableName, [location], row, callback) (succ, msg, id)
+    insertTableContent: [opInsert, 3],
+    // insertTableContents(tableName, [location], rows, callback) (succ, msg, ids)
+    insertTableContents: [opInsertMany, 3],
+    // insertWithUniqueCheck(tableName, [location], row, uniqueFields, callback) (succ, msg, id)
+    insertWithUniqueCheck: [opInsertUnique, 4],
+    // getAll(tableName, [location], callback)                  (succ, rows)
+    getAll: [opGetAll, 2],
+    // getRows(tableName, [location], where, callback)          (succ, rows)
+    getRows: [opGetRows, 3],
+    // updateRow(tableName, [location], where, set, callback)   (succ, msg, count)
+    updateRow: [opUpdate, 4],
+    // updateWithUniqueCheck(tableName, [location], where, set, uniqueFields, callback) (succ, msg, count)
+    updateWithUniqueCheck: [opUpdateUnique, 5],
+    // search(tableName, [location], field, keyword, callback)  (succ, rows)
+    search: [opSearch, 4],
+    // deleteRow(tableName, [location], where, callback)        (succ, msg, count)
+    deleteRow: [opDelete, 3],
+    // getField(tableName, [location], field, callback)         (succ, values)
+    getField: [opGetField, 3],
+    // clearTable(tableName, [location], callback)              (succ, msg)
+    clearTable: [opClearTable, 2],
+    // count(tableName, [location], callback)                   (succ, count)
+    count: [opCount, 2]
 };
+
+const callbackApi = {};
+const promiseApi = {
+    valid: (tableName, location) => Promise.resolve(valid(tableName, location)),
+    tableExists: (tableName, location) => Promise.resolve(tableExists(tableName, location))
+};
+
+for (const name of Object.keys(operations)) {
+    const [op, count] = operations[name];
+    callbackApi[name] = withCallback(op, count);
+    // Promise functions take one argument less: no callback.
+    promiseApi[name] = withPromise(op, count);
+}
+
+module.exports = Object.assign(callbackApi, {
+    valid,
+    tableExists,
+    promises: promiseApi,
+    _getInternals: () => ({ userData, tables }) // For tests
+});
